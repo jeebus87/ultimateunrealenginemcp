@@ -36,10 +36,20 @@ npx ultimate-unreal-engine-mcp setup
 ## Quick Start
 
 ```bash
+# Claude Desktop (default)
 npx ultimate-unreal-engine-mcp setup
+
+# Claude Code CLI
+npx ultimate-unreal-engine-mcp setup --client claude-code
+
+# Cursor
+npx ultimate-unreal-engine-mcp setup --client cursor
+
+# With a UE project (also installs the C++ plugin)
+npx ultimate-unreal-engine-mcp setup --project "C:/MyGame"
 ```
 
-This command installs the server and writes the correct config block for your MCP client (Claude Desktop, Cursor, or VS Code). The C++ plugin is optional — file system and code generation tools work without it.
+This command writes the correct config for your client. The C++ plugin is optional — file system and code generation tools work without it.
 
 ---
 

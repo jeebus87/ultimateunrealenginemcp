@@ -31,7 +31,7 @@ function getConfigPath(client: string): string {
       return join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
 
     case 'claude-code':
-      return join(home, '.claude', 'settings.json');
+      return join(home, '.claude.json');
 
     case 'cursor':
       if (platform === 'win32') {
@@ -125,7 +125,12 @@ function configureClient(client: string, port: number, projectRoot: string): voi
     args: ['-y', 'ultimate-unreal-engine-mcp'],
   };
 
-  // Only add env if project root is specified
+  // Claude Code requires "type": "stdio" in each entry
+  if (client === 'claude-code') {
+    serverEntry['type'] = 'stdio';
+  }
+
+  // Only add env if project root is specified or port is non-default
   const envBlock: Record<string, string> = {};
   if (projectRoot) {
     envBlock['UE_PROJECT_ROOT'] = projectRoot;
@@ -137,19 +142,11 @@ function configureClient(client: string, port: number, projectRoot: string): voi
     serverEntry['env'] = envBlock;
   }
 
-  if (client === 'claude-code') {
-    // Claude Code uses settings.json with mcpServers at top level
-    if (!config['mcpServers'] || typeof config['mcpServers'] !== 'object') {
-      config['mcpServers'] = {};
-    }
-    (config['mcpServers'] as Record<string, unknown>)['unreal-engine'] = serverEntry;
-  } else {
-    // Claude Desktop and Cursor use the standard format
-    if (!config['mcpServers'] || typeof config['mcpServers'] !== 'object') {
-      config['mcpServers'] = {};
-    }
-    (config['mcpServers'] as Record<string, unknown>)['unreal-engine'] = serverEntry;
+  // All clients use mcpServers at top level
+  if (!config['mcpServers'] || typeof config['mcpServers'] !== 'object') {
+    config['mcpServers'] = {};
   }
+  (config['mcpServers'] as Record<string, unknown>)['unreal-engine'] = serverEntry;
 
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
