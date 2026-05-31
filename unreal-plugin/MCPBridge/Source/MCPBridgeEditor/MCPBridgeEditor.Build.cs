@@ -1,7 +1,12 @@
 // MCPBridgeEditor.Build.cs
-// Editor module: UEditorSubsystem lifecycle, editor API handlers (Phases 8-29).
+// Editor module: UEditorSubsystem lifecycle, editor API handlers.
 // Depends on MCPBridgeRuntime for the TCP server.
 // This module is guarded by WITH_EDITOR -- never ships to cooked builds.
+//
+// Only modules that ship with every UE 5.7 binary install are linked here.
+// Handlers for optional plugins live in the Private/Optional/ subfolder
+// and are NOT compiled by default. To enable them, move them to Private/
+// and add their module dependencies below.
 
 using UnrealBuildTool;
 
@@ -19,55 +24,37 @@ public class MCPBridgeEditor : ModuleRules
 
         PrivateDependencyModuleNames.AddRange(new string[]
         {
+            // Core engine (always present)
             "CoreUObject",
             "Engine",
             "UnrealEd",
             "EditorSubsystem",
             "Json",
+            "SlateCore",
+            "InputCore",
+            "AssetTools",
+            "AssetRegistry",
+            "LevelEditor",
+            "PhysicsCore",
+
+            // Blueprint (always present in editor)
             "Kismet",
             "BlueprintGraph",
-            "AssetRegistry",
-            "InputCore",
-            "EnhancedInput",
-            "LevelEditor",
-            "SlateCore",
-            "DataValidation",
+
+            // Sequencer (always present in editor)
             "LevelSequence",
+            "LevelSequenceEditor",
             "MovieScene",
             "MovieSceneTracks",
-            "LevelSequenceEditor",
-            "MaterialEditor",
-            "AssetTools",
-            "AnimGraph",
-            "AnimGraphRuntime",
-            "IKRig",
-            "WorldPartitionEditor",
-            "DataLayerEditor",
-            "PhysicsCore",
-            "MetasoundEngine",
-            "MetasoundFrontend",
-            "InterchangeEngine",
-            "InterchangeCore",              // UInterchangeSourceData
-            "InterchangePipelines",
+
+            // Input (always present)
+            "EnhancedInput",
+
+            // AI (always present)
             "AIModule",
-            "StateTreeModule",
             "NavigationSystem",
-            "GameplayAbilities",        // Phase 25 - GAS
-            "GameplayTags",             // Phase 25 - GAS
-            "GameplayTasks",            // Phase 25 - GAS
-            "GeometryCollectionEngine", // Phase 26 - Chaos destruction (UGeometryCollectionComponent)
-            "Chaos",                    // Phase 26 - FManagedArrayCollection, FTransformCollection
-            "ClothingSystemRuntimeCommon", // Phase 26 - UClothingAssetCommon
-            "ChaosCloth",               // Phase 26 - Chaos cloth simulation parameters
-            "LiveLinkInterface",        // Phase 27 - ILiveLinkClient, FLiveLinkSubjectKey, FLiveLinkSubjectFrameData
-            "LiveLink",                 // Phase 27 - ULiveLinkSubjectSettings for per-subject enabled state control
-            "AvalancheTransition",      // Phase 28 - Motion Design Transition Logic trees (experimental)
-            "RemoteControl",            // Phase 28 - Remote Control preset read/write
-            "MovieRenderPipelineCore",  // Phase 29 - UMoviePipelineQueue, UMoviePipelineExecutorJob, config/settings types
-            "MovieRenderPipelineSettings", // Phase 29 - UMoviePipelineBurnInSetting
-            "MovieRenderPipelineEditor", // Phase 29 - UMoviePipelineQueueSubsystem
-            "OnlineSubsystem",          // Phase 30 - IOnlineSubsystem, IOnlineSession, FOnlineSessionSettings
-            "OnlineSubsystemUtils",     // Phase 30 - Online subsystem helper utilities
+            "GameplayTags",
+            "GameplayTasks",
         });
     }
 }
