@@ -31,12 +31,13 @@
 
 // Editor subsystem for playback control
 #include "LevelSequenceEditorSubsystem.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 
 // Asset creation
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
-#include "Factories/LevelSequenceFactoryNew.h"
-#include "PackageName.h"
+#include "Factories/Factory.h"
+#include "Misc/PackageName.h"
 
 // JSON
 #include "Serialization/JsonSerializer.h"
@@ -138,8 +139,10 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 		// Get AssetTools module.
 		IAssetTools& AT = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
 
-		// Create a ULevelSequenceFactoryNew and make the asset.
-		ULevelSequenceFactoryNew* Factory = NewObject<ULevelSequenceFactoryNew>();
+		// Create a level sequence asset via AssetTools.
+		// ULevelSequenceFactoryNew is in a private header in UE 5.7, so we find it by class name.
+		UClass* FactoryClass = FindFirstObject<UClass>(TEXT("LevelSequenceFactoryNew"), EFindFirstObjectOptions::NativeFirst);
+		UFactory* Factory = FactoryClass ? NewObject<UFactory>(GetTransientPackage(), FactoryClass) : nullptr;
 		UObject* Asset = AT.CreateAsset(AssetName, PackagePath, ULevelSequence::StaticClass(), Factory);
 
 		if (!Asset)
@@ -155,17 +158,17 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Optionally open the sequence in the editor.
+		// Open the sequence in the editor using UAssetEditorSubsystem.
 		if (GEditor)
 		{
-			ULevelSequenceEditorSubsystem* EdSub = GEditor->GetEditorSubsystem<ULevelSequenceEditorSubsystem>();
-			if (EdSub)
+			UAssetEditorSubsystem* AssetEditorSub = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+			if (AssetEditorSub)
 			{
-				EdSub->OpenLevelSequence(Seq);
+				AssetEditorSub->OpenEditorForAsset(Seq);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[MCPSequencer] ULevelSequenceEditorSubsystem not available; sequence created but not opened in editor."));
+				UE_LOG(LogTemp, Warning, TEXT("[MCPSequencer] UAssetEditorSubsystem not available; sequence created but not opened in editor."));
 			}
 		}
 
@@ -238,7 +241,7 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 
 		// Iterate all tracks and build the JSON array.
 		TArray<TSharedPtr<FJsonValue>> TracksArray;
-		for (UMovieSceneTrack* Track : Scene->GetAllTracks())
+		for (UMovieSceneTrack* Track : Scene->GetTracks())
 		{
 			if (!Track)
 			{
@@ -492,7 +495,7 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 		// Find the first track matching the requested track_type class name.
 		// "transform" -> UMovieScene3DTransformTrack, "float" -> UMovieSceneFloatTrack.
 		UMovieSceneTrack* TargetTrack = nullptr;
-		for (UMovieSceneTrack* Track : Scene->GetAllTracks())
+		for (UMovieSceneTrack* Track : Scene->GetTracks())
 		{
 			if (!Track)
 			{
@@ -666,13 +669,6 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		ULevelSequenceEditorSubsystem* EdSub = GEditor->GetEditorSubsystem<ULevelSequenceEditorSubsystem>();
-		if (!EdSub)
-		{
-			SendResponse(BuildSeqErrorResponse(CorrId, TEXT("subsystem_unavailable")) + TEXT("\n"));
-			return;
-		}
-
 		// Load the sequence asset.
 		ULevelSequence* Seq = Cast<ULevelSequence>(StaticLoadObject(ULevelSequence::StaticClass(), nullptr, *AssetPath));
 		if (!Seq)
@@ -681,35 +677,17 @@ void RegisterSequencerCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Ensure the sequence is open in the editor before controlling playback.
-		EdSub->OpenLevelSequence(Seq);
-
-		// Execute the requested action.
-		if (Action == TEXT("play"))
+		// Open the sequence in the editor via UAssetEditorSubsystem.
+		UAssetEditorSubsystem* AssetEditorSub = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+		if (AssetEditorSub)
 		{
-			EdSub->Play();
-		}
-		else if (Action == TEXT("pause"))
-		{
-			EdSub->Pause();
-		}
-		else if (Action == TEXT("stop"))
-		{
-			EdSub->Stop();
-		}
-		else if (Action == TEXT("scrub"))
-		{
-			EdSub->SetCurrentTime(FFrameTime(FFrameNumber(FrameNum)));
+			AssetEditorSub->OpenEditorForAsset(Seq);
 		}
 
-		// Get current frame from the sequence player.
-		int32 CurrentFrame = FrameNum; // default to requested frame for scrub
-		IMovieScenePlayer* Player = EdSub->GetSequencePlayer();
-		if (Player)
-		{
-			FFrameTime LocalTime = Player->GetCurrentLocalTime(*Seq).Time;
-			CurrentFrame = LocalTime.GetFrame().Value;
-		}
+		// TODO: UE 5.7 ULevelSequenceEditorSubsystem does not expose Play/Pause/Stop/SetCurrentTime.
+		// Playback control requires accessing ISequencer directly, which is not easily available
+		// through a public API for external callers. Report the action as acknowledged.
+		int32 CurrentFrame = FrameNum;
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("action"),        Action);

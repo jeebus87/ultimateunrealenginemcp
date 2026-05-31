@@ -193,7 +193,7 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 
 	GScreenshotResolutionX = Width;
 	GScreenshotResolutionY = Height;
-	FScreenshotRequest::RequestScreenshot(FilePath, false /* bShowUI */);
+	FScreenshotRequest::RequestScreenshot(FilePath, false /* bShowUI */, false /* bAddFilenameSuffix */);
 
 	return FilePath;
 }

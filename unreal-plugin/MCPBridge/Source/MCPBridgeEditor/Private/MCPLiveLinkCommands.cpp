@@ -206,7 +206,7 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 		ILiveLinkClient& Client = IModularFeatures::Get().GetModularFeature<ILiveLinkClient>(ILiveLinkClient::ModularFeatureName);
 
 		// Include disabled subjects so the full list is visible.
-		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true);
+		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true, /*bIncludeVirtualSubjects=*/true);
 
 		TArray<TSharedPtr<FJsonValue>> SubjectArray;
 		SubjectArray.Reserve(SubjectKeys.Num());
@@ -223,8 +223,8 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 			if (Settings)
 			{
 				RoleName = GetRoleFriendlyName(Settings->Role);
-				bEnabled = Settings->bEnabled;
 			}
+			bEnabled = Client.IsSubjectEnabled(SubjectKey, /*bForThisFrame=*/false);
 
 			TSharedPtr<FJsonObject> SubjectObj = MakeShared<FJsonObject>();
 			SubjectObj->SetStringField(TEXT("subject_name"), SubjectName);
@@ -278,7 +278,7 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 		ILiveLinkClient& Client = IModularFeatures::Get().GetModularFeature<ILiveLinkClient>(ILiveLinkClient::ModularFeatureName);
 
 		// T-27-01: Find subject by exact name match from GetSubjects() -- never use raw input as key.
-		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true);
+		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true, /*bIncludeVirtualSubjects=*/true);
 
 		bool bFound = false;
 		for (const FLiveLinkSubjectKey& SubjectKey : SubjectKeys)
@@ -294,7 +294,7 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 				}
 
 				// Toggle the enabled state (runtime-only; no Modify() needed for Live Link subject state).
-				Settings->bEnabled = bEnabled;
+				Client.SetSubjectEnabled(SubjectKey, bEnabled);
 
 				const FString StateMessage = bEnabled
 					? TEXT("Subject resumed")
@@ -349,7 +349,7 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 		ILiveLinkClient& Client = IModularFeatures::Get().GetModularFeature<ILiveLinkClient>(ILiveLinkClient::ModularFeatureName);
 
 		// T-27-01: Find subject by exact name match from GetSubjects() -- never use raw input as key.
-		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true);
+		TArray<FLiveLinkSubjectKey> SubjectKeys = Client.GetSubjects(/*bIncludeDisabledSubjects=*/true, /*bIncludeVirtualSubjects=*/true);
 
 		bool bFound = false;
 		for (const FLiveLinkSubjectKey& SubjectKey : SubjectKeys)
@@ -374,7 +374,7 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 
 			// Retrieve the latest frame data.
 			FLiveLinkSubjectFrameData FrameData;
-			const bool bHasData = Client.EvaluateFrame_AnyThread(SubjectKey, RoleClass, FrameData);
+			const bool bHasData = Client.EvaluateFrame_AnyThread(SubjectKey.SubjectName, RoleClass, FrameData);
 
 			if (!bHasData || !FrameData.StaticData.IsValid() || !FrameData.FrameData.IsValid())
 			{

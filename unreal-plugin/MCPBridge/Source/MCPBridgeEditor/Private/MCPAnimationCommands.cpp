@@ -17,11 +17,14 @@
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/BlendSpace.h"
+#include "Animation/BlendSpace1D.h"
 #include "Animation/AnimSequence.h"
 
 // AnimGraph headers for state machine node access
 #include "AnimGraphNode_StateMachine.h"
+#include "AnimationStateMachineGraph.h"
 #include "AnimStateNode.h"
+#include "AnimStateTransitionNode.h"
 
 // Asset Registry
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -30,6 +33,7 @@
 // IKRetargeter -- from IKRig plugin
 #if WITH_EDITOR
 #include "Retargeter/IKRetargeter.h"
+#include "Retargeter/IKRetargetChainMapping.h"
 #endif
 
 // JSON
@@ -268,8 +272,8 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 				TArray<TSharedPtr<FJsonValue>> StatesArray;
 				TArray<TSharedPtr<FJsonValue>> TransitionsArray;
 
-				// The state machine graph is referenced by BoundGraph.
-				UEdGraph* SMGraph = SMNode->GetBoundGraph();
+				// The state machine graph is referenced by EditorStateMachineGraph.
+				UEdGraph* SMGraph = Cast<UEdGraph>(SMNode->EditorStateMachineGraph.Get());
 				if (SMGraph)
 				{
 					for (UEdGraphNode* SMSubNode : SMGraph->Nodes)
@@ -427,9 +431,9 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 		for (const FCompositeSection& Section : Montage->CompositeSections)
 		{
 			FString LinkedSequenceName;
-			if (Section.LinkedSequence)
+			if (Section.GetLinkedSequence())
 			{
-				LinkedSequenceName = Section.LinkedSequence->GetPathName();
+				LinkedSequenceName = Section.GetLinkedSequence()->GetPathName();
 			}
 
 			TSharedPtr<FJsonObject> SectionObj = MakeShared<FJsonObject>();
@@ -536,7 +540,7 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 		const int32 NumAxes = bIs1D ? 1 : 2; // 1D uses 1 axis, 2D uses 2 axes (index 0 and 1).
 		for (int32 i = 0; i < NumAxes; ++i)
 		{
-			const FBlendParameter& Param = BlendSpace->BlendParameters[i];
+			const FBlendParameter& Param = BlendSpace->GetBlendParameter(i);
 			TSharedPtr<FJsonObject> AxisObj = MakeShared<FJsonObject>();
 			AxisObj->SetStringField(TEXT("name"), Param.DisplayName);
 			AxisObj->SetNumberField(TEXT("min"), static_cast<double>(Param.Min));
@@ -547,7 +551,7 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 
 		// Build samples array from SampleData.
 		TArray<TSharedPtr<FJsonValue>> SamplesArray;
-		for (const FBlendSample& Sample : BlendSpace->SampleData)
+		for (const FBlendSample& Sample : BlendSpace->GetBlendSamples())
 		{
 			FString AnimPath;
 			if (Sample.Animation)
@@ -617,13 +621,13 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 		FString SourceRigPath;
 		FString TargetRigPath;
 
-		const UIKRigDefinition* SourceRig = Retargeter->GetSourceIKRig();
+		const UIKRigDefinition* SourceRig = Retargeter->GetIKRig(ERetargetSourceOrTarget::Source);
 		if (SourceRig)
 		{
 			SourceRigPath = SourceRig->GetPathName();
 		}
 
-		const UIKRigDefinition* TargetRig = Retargeter->GetTargetIKRig();
+		const UIKRigDefinition* TargetRig = Retargeter->GetIKRig(ERetargetSourceOrTarget::Target);
 		if (TargetRig)
 		{
 			TargetRigPath = TargetRig->GetPathName();
@@ -631,11 +635,14 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 
 		// Collect chain mappings.
 		TArray<TSharedPtr<FJsonValue>> ChainMappingsArray;
-		for (const FRetargetChainMap& ChainMap : Retargeter->GetChainMapping())
+		PRAGMA_DISABLE_DEPRECATION_WARNINGS
+		const TArray<FRetargetChainPair>& ChainPairs = Retargeter->GetChainMapping().GetChainPairs();
+		PRAGMA_ENABLE_DEPRECATION_WARNINGS
+		for (const FRetargetChainPair& ChainPair : ChainPairs)
 		{
 			TSharedPtr<FJsonObject> MappingObj = MakeShared<FJsonObject>();
-			MappingObj->SetStringField(TEXT("source_chain"), ChainMap.SourceChain.ToString());
-			MappingObj->SetStringField(TEXT("target_chain"), ChainMap.TargetChain.ToString());
+			MappingObj->SetStringField(TEXT("source_chain"), ChainPair.SourceChainName.ToString());
+			MappingObj->SetStringField(TEXT("target_chain"), ChainPair.TargetChainName.ToString());
 			ChainMappingsArray.Add(MakeShared<FJsonValueObject>(MappingObj));
 		}
 

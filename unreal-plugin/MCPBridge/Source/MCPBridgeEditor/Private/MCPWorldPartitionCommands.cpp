@@ -16,11 +16,14 @@
 #include "WorldPartition/WorldPartition.h"
 #include "WorldPartition/WorldPartitionSubsystem.h"
 #include "WorldPartition/WorldPartitionStreamingSource.h"
+#include "WorldPartition/WorldPartitionRuntimeHash.h"
+#include "Components/WorldPartitionStreamingSourceComponent.h"
 
 // Data Layer headers
 #include "WorldPartition/DataLayer/DataLayerInstance.h"
-#include "WorldPartition/DataLayer/DataLayerSubsystem.h"
+#include "WorldPartition/DataLayer/DataLayerInstanceWithAsset.h"
 #include "WorldPartition/DataLayer/WorldDataLayers.h"
+#include "DataLayer/DataLayerEditorSubsystem.h"
 
 // HLOD headers
 #include "WorldPartition/HLOD/HLODLayer.h"
@@ -255,7 +258,7 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 
 				if (WorldDataLayers)
 				{
-					WorldDataLayers->ForEachDataLayer([&LayersArray](UDataLayerInstance* DataLayerInstance) -> bool
+					WorldDataLayers->ForEachDataLayerInstance([&LayersArray](UDataLayerInstance* DataLayerInstance) -> bool
 					{
 						if (!DataLayerInstance)
 						{
@@ -329,26 +332,32 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 
 #if WITH_EDITOR
 				// Use UDataLayerEditorSubsystem if available.
-				UDataLayerEditorSubsystem* DataLayerSubsystem = GEditor->GetEditorSubsystem<UDataLayerEditorSubsystem>();
+				UDataLayerEditorSubsystem* DataLayerSubsystem = UDataLayerEditorSubsystem::Get();
 				if (!DataLayerSubsystem)
 				{
 					SendResponse(BuildWPErrorResponse(CorrId, TEXT("data_layer_editor_subsystem_unavailable")) + TEXT("\n"));
 					return;
 				}
 
-				// Determine if we need a runtime layer.
-				bool bIsRuntime = (LayerType == TEXT("Runtime"));
-				UDataLayerAsset* NewAsset = DataLayerSubsystem->CreateDataLayerAsset(*LayerName, bIsRuntime);
-				if (!NewAsset)
+				// Create data layer instance using FDataLayerCreationParameters.
+				// Note: In UE 5.7, CreateDataLayerAsset no longer exists.
+				// Use CreateDataLayerInstance with FDataLayerCreationParameters instead.
+				// We create a private data layer instance (no asset required).
+				FDataLayerCreationParameters CreationParams;
+				CreationParams.WorldDataLayers = WorldDataLayers;
+				CreationParams.bIsPrivate = true;
+
+				UDataLayerInstance* NewDataLayerInstance = DataLayerSubsystem->CreateDataLayerInstance(CreationParams);
+				if (!NewDataLayerInstance)
 				{
 					SendResponse(BuildWPErrorResponse(CorrId, TEXT("failed_to_create_data_layer")) + TEXT("\n"));
 					return;
 				}
 
 				TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
-				LayerObj->SetStringField(TEXT("name"), LayerName);
+				LayerObj->SetStringField(TEXT("name"), NewDataLayerInstance->GetDataLayerFullName());
 				LayerObj->SetStringField(TEXT("type"), LayerType.IsEmpty() ? TEXT("Editor") : LayerType);
-				LayerObj->SetStringField(TEXT("asset_path"), NewAsset->GetPathName());
+				LayerObj->SetStringField(TEXT("instance_name"), NewDataLayerInstance->GetDataLayerFullName());
 
 				TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 				Data->SetObjectField(TEXT("created_layer"), LayerObj);
@@ -392,7 +401,7 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 				}
 
 				UDataLayerInstance* FoundLayer = nullptr;
-				WorldDataLayers->ForEachDataLayer([&FoundLayer, &LayerName](UDataLayerInstance* DataLayerInstance) -> bool
+				WorldDataLayers->ForEachDataLayerInstance([&FoundLayer, &LayerName](UDataLayerInstance* DataLayerInstance) -> bool
 				{
 					if (DataLayerInstance && DataLayerInstance->GetDataLayerFullName() == LayerName)
 					{
@@ -484,7 +493,7 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 				}
 
 				UDataLayerInstance* FoundLayer = nullptr;
-				WorldDataLayers->ForEachDataLayer([&FoundLayer, &LayerName](UDataLayerInstance* DataLayerInstance) -> bool
+				WorldDataLayers->ForEachDataLayerInstance([&FoundLayer, &LayerName](UDataLayerInstance* DataLayerInstance) -> bool
 				{
 					if (DataLayerInstance && DataLayerInstance->GetDataLayerFullName() == LayerName)
 					{
@@ -501,7 +510,7 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 				}
 
 #if WITH_EDITOR
-				UDataLayerEditorSubsystem* DataLayerSubsystem = GEditor->GetEditorSubsystem<UDataLayerEditorSubsystem>();
+				UDataLayerEditorSubsystem* DataLayerSubsystem = UDataLayerEditorSubsystem::Get();
 				if (!DataLayerSubsystem)
 				{
 					SendResponse(BuildWPErrorResponse(CorrId, TEXT("data_layer_editor_subsystem_unavailable")) + TEXT("\n"));
@@ -588,35 +597,38 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 				}
 
 				// Find all UWorldPartitionStreamingSourceComponent on this actor.
-				TArray<UActorComponent*> Components;
-				Actor->GetComponents(UWorldPartitionStreamingSourceComponent::StaticClass(), Components);
+				TArray<UWorldPartitionStreamingSourceComponent*> StreamingComponents;
+				Actor->GetComponents<UWorldPartitionStreamingSourceComponent>(StreamingComponents);
 
-				for (UActorComponent* Comp : Components)
+				for (UWorldPartitionStreamingSourceComponent* SourceComp : StreamingComponents)
 				{
-					UWorldPartitionStreamingSourceComponent* SourceComp = Cast<UWorldPartitionStreamingSourceComponent>(Comp);
 					if (!SourceComp)
 					{
 						continue;
 					}
 
-					// Get target state as string.
+					// Use GetStreamingSource() to access TargetState (which is private on the component).
+					FWorldPartitionStreamingSource StreamingSource;
 					FString TargetStateStr = TEXT("Loaded");
-					EStreamingSourceTargetState TargetState = SourceComp->TargetState;
-					if (TargetState == EStreamingSourceTargetState::Activated)
+					if (SourceComp->GetStreamingSource(StreamingSource))
 					{
-						TargetStateStr = TEXT("Activated");
-					}
-					else if (TargetState == EStreamingSourceTargetState::Loaded)
-					{
-						TargetStateStr = TEXT("Loaded");
+						if (StreamingSource.TargetState == EStreamingSourceTargetState::Activated)
+						{
+							TargetStateStr = TEXT("Activated");
+						}
+						else if (StreamingSource.TargetState == EStreamingSourceTargetState::Loaded)
+						{
+							TargetStateStr = TEXT("Loaded");
+						}
 					}
 
-					// Build shapes array.
+					// Build shapes array from the component's public Shapes property.
 					TArray<TSharedPtr<FJsonValue>> ShapesArray;
-					for (const FWorldPartitionStreamingQuerySource& Shape : SourceComp->DebugSources)
+					for (const FStreamingSourceShape& Shape : SourceComp->Shapes)
 					{
 						TSharedPtr<FJsonObject> ShapeObj = MakeShared<FJsonObject>();
 						ShapeObj->SetNumberField(TEXT("radius"), static_cast<double>(Shape.Radius));
+						ShapeObj->SetBoolField(TEXT("use_grid_loading_range"), Shape.bUseGridLoadingRange);
 						ShapeObj->SetNumberField(TEXT("pos_x"), static_cast<double>(Shape.Location.X));
 						ShapeObj->SetNumberField(TEXT("pos_y"), static_cast<double>(Shape.Location.Y));
 						ShapeObj->SetNumberField(TEXT("pos_z"), static_cast<double>(Shape.Location.Z));
@@ -729,7 +741,12 @@ void RegisterWorldPartitionCommands(FMCPCommandRouter& Router)
 					TSharedPtr<FJsonObject> LayerObj = MakeShared<FJsonObject>();
 					LayerObj->SetStringField(TEXT("layer_name"), HLODLayer->GetName());
 					LayerObj->SetStringField(TEXT("asset_path"), LayerAssetPath);
+
+					// IsSpatiallyLoaded() is deprecated in UE 5.7 (properties moved to partition settings).
+					// Suppress warning since we still want to report the legacy value for informational purposes.
+					PRAGMA_DISABLE_DEPRECATION_WARNINGS
 					LayerObj->SetBoolField(TEXT("is_spatially_loaded"), HLODLayer->IsSpatiallyLoaded());
+					PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
 					// Read cell size via reflection -- UHLODLayer::CellSize or similar property.
 					double CellSize = 0.0;

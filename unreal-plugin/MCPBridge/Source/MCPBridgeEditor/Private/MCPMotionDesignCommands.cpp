@@ -808,10 +808,10 @@ void RegisterMotionDesignCommands(FMCPCommandRouter& Router)
 			TArray<TSharedPtr<FJsonValue>> PropertiesArray;
 			TArray<TSharedPtr<FJsonValue>> FunctionsArray;
 
-			// Iterate exposed fields (properties).
-			for (const TWeakPtr<FRemoteControlField>& WeakField : Preset->GetExposedEntities<FRemoteControlField>())
+			// Iterate exposed properties.
+			for (const TWeakPtr<FRemoteControlProperty>& WeakField : Preset->GetExposedEntities<FRemoteControlProperty>())
 			{
-				TSharedPtr<FRemoteControlField> Field = WeakField.Pin();
+				TSharedPtr<FRemoteControlProperty> Field = WeakField.Pin();
 				if (!Field.IsValid())
 				{
 					continue;
@@ -878,11 +878,11 @@ void RegisterMotionDesignCommands(FMCPCommandRouter& Router)
 				return;
 			}
 
-			// Find the exposed field by label.
+			// Find the exposed property by label.
 			bool bFound = false;
-			for (const TWeakPtr<FRemoteControlField>& WeakField : Preset->GetExposedEntities<FRemoteControlField>())
+			for (const TWeakPtr<FRemoteControlProperty>& WeakField : Preset->GetExposedEntities<FRemoteControlProperty>())
 			{
-				TSharedPtr<FRemoteControlField> Field = WeakField.Pin();
+				TSharedPtr<FRemoteControlProperty> Field = WeakField.Pin();
 				if (!Field.IsValid())
 				{
 					continue;
@@ -940,11 +940,11 @@ void RegisterMotionDesignCommands(FMCPCommandRouter& Router)
 				return;
 			}
 
-			// Find the exposed field by label.
+			// Find the exposed property by label.
 			bool bFound = false;
-			for (const TWeakPtr<FRemoteControlField>& WeakField : Preset->GetExposedEntities<FRemoteControlField>())
+			for (const TWeakPtr<FRemoteControlProperty>& WeakField : Preset->GetExposedEntities<FRemoteControlProperty>())
 			{
-				TSharedPtr<FRemoteControlField> Field = WeakField.Pin();
+				TSharedPtr<FRemoteControlProperty> Field = WeakField.Pin();
 				if (!Field.IsValid())
 				{
 					continue;

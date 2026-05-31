@@ -57,7 +57,7 @@ public:
 		// Enforce ring buffer cap: drop oldest entry when at limit (T-12-02).
 		if (GPieCapturedLogs.Num() >= GPieLogMaxLines)
 		{
-			GPieCapturedLogs.RemoveAt(0, 1, /*bAllowShrinking=*/false);
+			GPieCapturedLogs.RemoveAt(0, 1, EAllowShrinking::No);
 		}
 
 		GPieCapturedLogs.Add(MoveTemp(Line));
@@ -142,8 +142,9 @@ void RegisterPieCommands(FMCPCommandRouter& Router)
 		GPieLogDevice = MakeUnique<FMCPPieLogCapture>();
 		GLog->AddOutputDevice(GPieLogDevice.Get());
 
-		// Start PIE (false = game mode, not simulate-in-editor).
-		GEditor->PlayInEditor(GEditor->GetEditorWorldContext().World(), /*bInSimulateInEditor=*/false);
+		// Start PIE using RequestPlaySession (UE 5.7 API).
+		FRequestPlaySessionParams Params;
+		GEditor->RequestPlaySession(Params);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetBoolField(TEXT("started"), true);

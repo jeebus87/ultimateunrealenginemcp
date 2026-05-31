@@ -585,7 +585,7 @@ void RegisterSelectionCommands(FMCPCommandRouter& Router)
 			else
 			{
 				// Native class name -- search loaded classes.
-				TargetClass = FindObject<UClass>(ANY_PACKAGE, *TargetClassName);
+				TargetClass = FindFirstObject<UClass>( *TargetClassName);
 				if (!TargetClass)
 				{
 					// Try with the Actor suffix convention common in UE.

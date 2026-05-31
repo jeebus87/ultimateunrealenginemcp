@@ -15,7 +15,7 @@
 #include "MCPCommandRouter.h"
 
 // Validation APIs
-#include "DataValidation/EditorValidatorSubsystem.h"
+#include "EditorValidatorSubsystem.h"
 
 // Blueprint APIs
 #include "Engine/Blueprint.h"
@@ -106,11 +106,11 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 
 		// T-16-01: Validate the asset path is a well-formed long package name.
 		// Rejects path traversal ("../") and bare filenames.
-		FString ValidationError;
+		FText ValidationError;
 		if (!FPackageName::IsValidLongPackageName(AssetPath, /*bIncludeReadOnlyRoots=*/false, &ValidationError))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] validate.asset: Invalid asset path '%s': %s"),
-				*AssetPath, *ValidationError);
+				*AssetPath, *ValidationError.ToString());
 			SendError(SendResponse, CorrelationId, TEXT("invalid_asset_path"));
 			return;
 		}
@@ -141,7 +141,7 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 		Settings.ValidationUsecase = EDataValidationUsecase::Script;
 
 		FValidateAssetsResults Results;
-		ValidatorSubsystem->ValidateAssetsWithResults(AssetsToValidate, Settings, Results);
+		ValidatorSubsystem->ValidateAssetsWithSettings(AssetsToValidate, Settings, Results);
 
 		const bool bValid = (Results.NumInvalid == 0);
 
@@ -225,7 +225,7 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 		Settings.ValidationUsecase = EDataValidationUsecase::Script;
 
 		FValidateAssetsResults Results;
-		ValidatorSubsystem->ValidateAssetsWithResults(OutAssets, Settings, Results);
+		ValidatorSubsystem->ValidateAssetsWithSettings(OutAssets, Settings, Results);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("folderPath"), FolderPath);
@@ -266,7 +266,7 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 		Settings.ValidationUsecase = EDataValidationUsecase::Script;
 
 		FValidateAssetsResults Results;
-		ValidatorSubsystem->ValidateAssetsWithResults(OutAssets, Settings, Results);
+		ValidatorSubsystem->ValidateAssetsWithSettings(OutAssets, Settings, Results);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetNumberField(TEXT("numRequested"), Results.NumRequested);
@@ -309,11 +309,11 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 		}
 
 		// T-16-01: Validate the asset path before passing to LoadObject.
-		FString ValidationError;
+		FText ValidationError;
 		if (!FPackageName::IsValidLongPackageName(AssetPath, /*bIncludeReadOnlyRoots=*/false, &ValidationError))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] validate.blueprint: Invalid asset path '%s': %s"),
-				*AssetPath, *ValidationError);
+				*AssetPath, *ValidationError.ToString());
 			SendError(SendResponse, CorrelationId, TEXT("invalid_asset_path"));
 			return;
 		}
@@ -354,9 +354,9 @@ void RegisterValidationCommands(FMCPCommandRouter& Router)
 				break;
 		}
 
-		// T-16-02: BP->ErrorMessage is the Blueprint's own error message authored during
-		// compilation -- safe to surface as it contains no internal UE system paths.
-		FString ErrorMessage = BP->ErrorMessage;
+		// Note: UBlueprint::ErrorMessage was removed in UE 5.7.
+		// We report compile status instead.
+		FString ErrorMessage = bCompiled ? TEXT("") : TEXT("Blueprint has compilation errors. Check the Blueprint editor for details.");
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("assetPath"), AssetPath);

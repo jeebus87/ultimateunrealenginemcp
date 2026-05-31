@@ -23,6 +23,9 @@
 // Asset Registry APIs
 #include "AssetRegistry/AssetRegistryModule.h"
 
+// Package saving
+#include "UObject/SavePackage.h"
+
 // UObject/Package APIs
 #include "UObject/Package.h"
 #include "Misc/PackageName.h"
@@ -177,11 +180,11 @@ void RegisterInputHandlers(FMCPCommandRouter& Router)
 
 		// T-14-01: Validate the asset path is a well-formed long package name.
 		// Rejects path traversal ("../") and bare filenames.
-		FString ValidationError;
+		FText ValidationError;
 		if (!FPackageName::IsValidLongPackageName(AssetPath, /*bIncludeReadOnlyRoots=*/false, &ValidationError))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] input.createAction: Invalid asset path '%s': %s"),
-				*AssetPath, *ValidationError);
+				*AssetPath, *ValidationError.ToString());
 			SendError(SendResponse, CorrelationId, TEXT("invalid_asset_path"));
 			return;
 		}
@@ -227,8 +230,10 @@ void RegisterInputHandlers(FMCPCommandRouter& Router)
 		// Save the package to disk so the asset persists.
 		FString FilePath = FPackageName::LongPackageNameToFilename(
 			AssetPath, FPackageName::GetAssetPackageExtension());
-		UPackage::SavePackage(Pkg, Action, RF_Standalone, *FilePath,
-			GError, nullptr, false, true, SAVE_NoError);
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		UPackage::SavePackage(Pkg, Action, *FilePath, SaveArgs);
 
 		// Notify the Asset Registry so the asset appears in the Content Browser.
 		FAssetRegistryModule::AssetCreated(Action);
@@ -331,7 +336,7 @@ void RegisterInputHandlers(FMCPCommandRouter& Router)
 
 		// T-14-02: Validate that the key name resolves to a known FKey before calling MapKey.
 		// FKey constructor accepts any FName; IsValid() checks whether it is a registered key.
-		const FKey ResolvedKey(FName(*KeyName));
+		const FKey ResolvedKey = FKey(FName(*KeyName));
 		if (!ResolvedKey.IsValid())
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] input.addBinding: Key '%s' is not a valid FKey"), *KeyName);
@@ -369,8 +374,10 @@ void RegisterInputHandlers(FMCPCommandRouter& Router)
 		UPackage* Pkg = IMC->GetPackage();
 		FString FilePath = FPackageName::LongPackageNameToFilename(
 			AssetPath, FPackageName::GetAssetPackageExtension());
-		UPackage::SavePackage(Pkg, IMC, RF_Standalone, *FilePath,
-			GError, nullptr, false, true, SAVE_NoError);
+		FSavePackageArgs SaveArgs2;
+		SaveArgs2.TopLevelFlags = RF_Standalone;
+		SaveArgs2.SaveFlags = SAVE_NoError;
+		UPackage::SavePackage(Pkg, IMC, *FilePath, SaveArgs2);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetBoolField(TEXT("bound"), true);

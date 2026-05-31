@@ -399,10 +399,10 @@ void RegisterChaosCommands(FMCPCommandRouter& Router)
 		GeoComp->Modify();
 
 		// Reset to initial unfractured state.
-		// UGeometryCollectionComponent::SetSimulatePhysics(false) + SetSimulatePhysics(true)
-		// is the reliable fallback approach that works across UE 5.x versions.
+		// ResetDynamicCollection() is protected in UE 5.7, so we use
+		// SetSimulatePhysics(false) + RecreatePhysicsState() as the public alternative.
 		GeoComp->SetSimulatePhysics(false);
-		GeoComp->ResetDynamicCollection();
+		GeoComp->RecreatePhysicsState();
 
 		// Notify editor of the change.
 		GeoComp->PostEditChange();

@@ -21,14 +21,17 @@
 #include "AssetToolsModule.h"
 #include "IAssetTools.h"
 #include "AssetImportTask.h"
-#include "PackageName.h"
+#include "Misc/PackageName.h"
 
 // FBX Factory and Export
 #include "Factories/FbxFactory.h"
+#include "Factories/FbxImportUI.h"
+#include "Factories/FbxStaticMeshImportData.h"
 #include "Exporters/FbxExportOption.h"
 
 // Interchange (USD import)
 #include "InterchangeManager.h"
+#include "InterchangeSourceData.h"
 
 // Mesh types
 #include "Engine/StaticMesh.h"
@@ -209,9 +212,9 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 			if (FbxFactory->ImportUI)
 			{
 				FbxFactory->ImportUI->bImportMaterials = bImportMaterials;
-				FbxFactory->ImportUI->bCombineMeshes = bCombineMeshes;
 				if (FbxFactory->ImportUI->StaticMeshImportData)
 				{
+					FbxFactory->ImportUI->StaticMeshImportData->bCombineMeshes = bCombineMeshes;
 					FbxFactory->ImportUI->StaticMeshImportData->ImportUniformScale = static_cast<float>(ScaleFactor);
 				}
 			}
@@ -301,12 +304,11 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 
 			if (GEditor && FModuleManager::Get().IsModuleLoaded(TEXT("InterchangeEngine")))
 			{
-				UInterchangeManager* InterchangeManager = UInterchangeManager::GetInterchangeManager();
-				if (InterchangeManager)
+				UInterchangeManager& InterchangeManager = UInterchangeManager::GetInterchangeManager();
+				if (true) // InterchangeManager is always valid when module is loaded
 				{
-					// Use Interchange to import the USD file.
 					// Set up import parameters with the destination path.
-					UE::Interchange::FImportAssetParameters Params;
+					FImportAssetParameters Params;
 					Params.bIsAutomated = true;
 
 					// Determine content path for Interchange. Normalize dest_path to directory.
@@ -320,9 +322,12 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 							ContentDir = FPackageName::GetLongPackagePath(ContentDir);
 						}
 					}
-					Params.OverrideDestinationPath = ContentDir;
 
-					InterchangeManager->ImportAsset(SourceFile, Params);
+					// Create UInterchangeSourceData from the source file path.
+					UInterchangeSourceData* SourceData = NewObject<UInterchangeSourceData>(GetTransientPackage());
+					SourceData->SetFilename(SourceFile);
+
+					InterchangeManager.ImportAsset(ContentDir, SourceData, Params);
 
 					// Interchange is async; we report success with empty assets list.
 					// The engine will place assets at ContentDir when complete.

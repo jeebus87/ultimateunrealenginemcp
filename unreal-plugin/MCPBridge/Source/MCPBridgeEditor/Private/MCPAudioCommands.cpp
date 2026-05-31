@@ -287,7 +287,7 @@ void RegisterAudioCommands(FMCPCommandRouter& Router)
 					AssetObj->SetNumberField(TEXT("sample_rate"),  static_cast<double>(SoundWave->GetSampleRateForCurrentPlatform()));
 					AssetObj->SetNumberField(TEXT("num_channels"), static_cast<double>(SoundWave->NumChannels));
 					// Compression name from the compression format enum via Audio::ToName().
-					const FName CompressionFName = Audio::ToName(SoundWave->GetSoundCompressionType());
+					const FName CompressionFName = Audio::ToName(SoundWave->GetSoundAssetCompressionType());
 					AssetObj->SetStringField(TEXT("compression_name"), CompressionFName.IsNone() ? TEXT("Unknown") : CompressionFName.ToString());
 				}
 				else

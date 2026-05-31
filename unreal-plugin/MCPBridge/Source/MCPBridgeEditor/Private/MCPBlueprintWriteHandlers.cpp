@@ -31,6 +31,7 @@
 // Asset APIs
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/Package.h"
+#include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
 
 // JSON APIs
@@ -146,17 +147,17 @@ void RegisterBlueprintWriteHandlers(FMCPCommandRouter& Router)
 
 		// T-10-01: Validate the asset path is a well-formed long package name.
 		// Rejects path traversal ("../") and bare filenames.
-		FString ValidationError;
+		FText ValidationError;
 		if (!FPackageName::IsValidLongPackageName(AssetPath, /*bIncludeReadOnlyRoots=*/false, &ValidationError))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] blueprint.create: Invalid asset path '%s': %s"),
-				*AssetPath, *ValidationError);
+				*AssetPath, *ValidationError.ToString());
 			SendError(SendResponse, CorrelationId, TEXT("invalid_asset_path"));
 			return;
 		}
 
 		// Resolve the parent class by name (try short name first, then full path).
-		UClass* ParentClass = FindObject<UClass>(ANY_PACKAGE, *ParentClassName);
+		UClass* ParentClass = FindFirstObject<UClass>( *ParentClassName);
 		if (!ParentClass)
 		{
 			ParentClass = LoadObject<UClass>(nullptr, *ParentClassName);
@@ -214,8 +215,10 @@ void RegisterBlueprintWriteHandlers(FMCPCommandRouter& Router)
 		// Save the package to disk so the asset persists.
 		FString FilePath = FPackageName::LongPackageNameToFilename(
 			AssetPath, FPackageName::GetAssetPackageExtension());
-		UPackage::SavePackage(Pkg, NewBP, RF_Standalone, *FilePath,
-			GError, nullptr, false, true, SAVE_NoError);
+		FSavePackageArgs SaveArgs;
+		SaveArgs.TopLevelFlags = RF_Standalone;
+		SaveArgs.SaveFlags = SAVE_NoError;
+		UPackage::SavePackage(Pkg, NewBP, *FilePath, SaveArgs);
 
 		// Notify the Asset Registry so the asset appears in the Content Browser.
 		FAssetRegistryModule::AssetCreated(NewBP);
@@ -288,7 +291,7 @@ void RegisterBlueprintWriteHandlers(FMCPCommandRouter& Router)
 		}
 
 		// T-10-02: Resolve node class and validate it is a non-abstract UEdGraphNode subclass.
-		UClass* NodeClass = FindObject<UClass>(ANY_PACKAGE, *NodeType);
+		UClass* NodeClass = FindFirstObject<UClass>( *NodeType);
 		if (!NodeClass)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] blueprint.addNode: Node type '%s' not found"), *NodeType);
@@ -649,9 +652,18 @@ void RegisterBlueprintWriteHandlers(FMCPCommandRouter& Router)
 				return;
 			}
 
-			// T-10-05: SetBlueprintVariableDefaultValue returns bool; use named error code on failure.
-			bool bSet = FBlueprintEditorUtils::SetBlueprintVariableDefaultValue(
-				BP, FName(*TargetName), DefaultValue);
+			// Find the variable in NewVariables and set its DefaultValue directly.
+			bool bSet = false;
+			const FName VarName(*TargetName);
+			for (FBPVariableDescription& VarDesc : BP->NewVariables)
+			{
+				if (VarDesc.VarName == VarName)
+				{
+					VarDesc.DefaultValue = DefaultValue;
+					bSet = true;
+					break;
+				}
+			}
 			if (!bSet)
 			{
 				UE_LOG(LogTemp, Warning, TEXT("[MCPBridge] blueprint.setDefault: Variable '%s' not found in '%s'"),

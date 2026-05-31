@@ -27,6 +27,7 @@ public class MCPBridgeEditor : ModuleRules
             "Kismet",
             "BlueprintGraph",
             "AssetRegistry",
+            "InputCore",
             "EnhancedInput",
             "LevelEditor",
             "SlateCore",
@@ -41,10 +42,12 @@ public class MCPBridgeEditor : ModuleRules
             "AnimGraphRuntime",
             "IKRig",
             "WorldPartitionEditor",
+            "DataLayerEditor",
             "PhysicsCore",
             "MetasoundEngine",
             "MetasoundFrontend",
             "InterchangeEngine",
+            "InterchangeCore",              // UInterchangeSourceData
             "InterchangePipelines",
             "AIModule",
             "StateTreeModule",
@@ -53,13 +56,15 @@ public class MCPBridgeEditor : ModuleRules
             "GameplayTags",             // Phase 25 - GAS
             "GameplayTasks",            // Phase 25 - GAS
             "GeometryCollectionEngine", // Phase 26 - Chaos destruction (UGeometryCollectionComponent)
+            "Chaos",                    // Phase 26 - FManagedArrayCollection, FTransformCollection
+            "ClothingSystemRuntimeCommon", // Phase 26 - UClothingAssetCommon
             "ChaosCloth",               // Phase 26 - Chaos cloth simulation parameters
             "LiveLinkInterface",        // Phase 27 - ILiveLinkClient, FLiveLinkSubjectKey, FLiveLinkSubjectFrameData
             "LiveLink",                 // Phase 27 - ULiveLinkSubjectSettings for per-subject enabled state control
-            "AvalancheRundown",         // Phase 28 - Motion Design Scene State machines (experimental)
             "AvalancheTransition",      // Phase 28 - Motion Design Transition Logic trees (experimental)
             "RemoteControl",            // Phase 28 - Remote Control preset read/write
             "MovieRenderPipelineCore",  // Phase 29 - UMoviePipelineQueue, UMoviePipelineExecutorJob, config/settings types
+            "MovieRenderPipelineSettings", // Phase 29 - UMoviePipelineBurnInSetting
             "MovieRenderPipelineEditor", // Phase 29 - UMoviePipelineQueueSubsystem
             "OnlineSubsystem",          // Phase 30 - IOnlineSubsystem, IOnlineSession, FOnlineSessionSettings
             "OnlineSubsystemUtils",     // Phase 30 - Online subsystem helper utilities

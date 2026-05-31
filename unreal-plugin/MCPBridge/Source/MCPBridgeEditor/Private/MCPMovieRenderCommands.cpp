@@ -17,7 +17,6 @@
 // Movie Render Pipeline headers
 #include "MoviePipelineQueueSubsystem.h"
 #include "MoviePipelineQueue.h"
-#include "MoviePipelineExecutorJob.h"
 #include "MoviePipelinePrimaryConfig.h"
 #include "MoviePipelineOutputSetting.h"
 #include "MoviePipelineBurnInSetting.h"
@@ -290,7 +289,7 @@ void RegisterMovieRenderCommands(FMCPCommandRouter& Router)
 		}
 
 		// Find or add output setting.
-		UMoviePipelineOutputSetting* OutputSetting = Config->FindOrAddSettingByClass<UMoviePipelineOutputSetting>();
+		UMoviePipelineOutputSetting* OutputSetting = Cast<UMoviePipelineOutputSetting>(Config->FindOrAddSettingByClass(UMoviePipelineOutputSetting::StaticClass()));
 		if (OutputSetting)
 		{
 			OutputSetting->OutputDirectory.Path = OutputDirectory;
@@ -526,7 +525,7 @@ void RegisterMovieRenderCommands(FMCPCommandRouter& Router)
 		FString FilenameFormat;
 		if (Payload->TryGetStringField(TEXT("filename_format"), FilenameFormat) && !FilenameFormat.IsEmpty())
 		{
-			UMoviePipelineOutputSetting* OutputSetting = Config->FindOrAddSettingByClass<UMoviePipelineOutputSetting>();
+			UMoviePipelineOutputSetting* OutputSetting = Cast<UMoviePipelineOutputSetting>(Config->FindOrAddSettingByClass(UMoviePipelineOutputSetting::StaticClass()));
 			if (OutputSetting)
 			{
 				OutputSetting->FileNameFormat = FilenameFormat;
@@ -539,13 +538,9 @@ void RegisterMovieRenderCommands(FMCPCommandRouter& Router)
 		if (BurnInVal && (*BurnInVal)->Type == EJson::Object)
 		{
 			TSharedPtr<FJsonObject> BurnInObj = (*BurnInVal)->AsObject();
-			UMoviePipelineBurnInSetting* BurnInSetting = Config->FindOrAddSettingByClass<UMoviePipelineBurnInSetting>();
+			UMoviePipelineBurnInSetting* BurnInSetting = Cast<UMoviePipelineBurnInSetting>(Config->FindOrAddSettingByClass(UMoviePipelineBurnInSetting::StaticClass()));
 			if (BurnInSetting)
 			{
-				// Apply burn-in text fields — set top-level text tokens if provided.
-				FString TopLeftText, TopCenterText, TopRightText;
-				FString BottomLeftText, BottomCenterText, BottomRightText;
-				if (BurnInObj->TryGetStringField(TEXT("top_left"),     TopLeftText))     { BurnInSetting->BurnInClass.ToString(); /* field access via config */ }
 				// Note: UMoviePipelineBurnInSetting stores font/class references.
 				// The burn-in text content is configured through the burn-in asset itself.
 				// We mark the setting as enabled with the provided class.
@@ -560,7 +555,7 @@ void RegisterMovieRenderCommands(FMCPCommandRouter& Router)
 		{
 			// EXR metadata key-value pairs are stored on the output setting as custom metadata.
 			// Find or add the output setting and record the metadata.
-			UMoviePipelineOutputSetting* OutputSetting = Config->FindOrAddSettingByClass<UMoviePipelineOutputSetting>();
+			UMoviePipelineOutputSetting* OutputSetting = Cast<UMoviePipelineOutputSetting>(Config->FindOrAddSettingByClass(UMoviePipelineOutputSetting::StaticClass()));
 			if (OutputSetting)
 			{
 				// Note: UMoviePipelineOutputSetting does not have a direct metadata map in 5.7.

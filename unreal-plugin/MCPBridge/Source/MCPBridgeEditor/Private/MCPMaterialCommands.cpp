@@ -19,7 +19,9 @@
 #include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceConstant.h"
-#include "MaterialEditingLibrary.h"
+#include "AssetToolsModule.h"
+#include "IAssetTools.h"
+#include "Factories/Factory.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -107,25 +109,26 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Collect parameter names by type.
-		TArray<FName> ScalarNames;
-		TArray<FName> VectorNames;
-		TArray<FName> TextureNames;
-		UMaterialEditingLibrary::GetScalarParameterNames(MatIface, ScalarNames);
-		UMaterialEditingLibrary::GetVectorParameterNames(MatIface, VectorNames);
-		UMaterialEditingLibrary::GetTextureParameterNames(MatIface, TextureNames);
+		// Collect parameter info by type using UMaterialInterface API directly.
+		TArray<FMaterialParameterInfo> ScalarParamInfos;
+		TArray<FMaterialParameterInfo> VectorParamInfos;
+		TArray<FMaterialParameterInfo> TextureParamInfos;
+		TArray<FGuid> ScalarGuids, VectorGuids, TextureGuids;
+		MatIface->GetAllScalarParameterInfo(ScalarParamInfos, ScalarGuids);
+		MatIface->GetAllVectorParameterInfo(VectorParamInfos, VectorGuids);
+		MatIface->GetAllTextureParameterInfo(TextureParamInfos, TextureGuids);
 
 		// Build the parameters JSON array.
 		TArray<TSharedPtr<FJsonValue>> ParamsArray;
 
 		// Scalar parameters.
-		for (const FName& Name : ScalarNames)
+		for (const FMaterialParameterInfo& ParamInfo : ScalarParamInfos)
 		{
 			float OutFloat = 0.0f;
-			UMaterialEditingLibrary::GetScalarParameterValue(MatIface, Name, OutFloat);
+			MatIface->GetScalarParameterValue(FHashedMaterialParameterInfo(ParamInfo), OutFloat);
 
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-			Entry->SetStringField(TEXT("name"), Name.ToString());
+			Entry->SetStringField(TEXT("name"), ParamInfo.Name.ToString());
 			Entry->SetStringField(TEXT("type"), TEXT("scalar"));
 			Entry->SetNumberField(TEXT("value"), static_cast<double>(OutFloat));
 			Entry->SetNumberField(TEXT("default_value"), static_cast<double>(OutFloat));
@@ -133,10 +136,10 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 		}
 
 		// Vector parameters.
-		for (const FName& Name : VectorNames)
+		for (const FMaterialParameterInfo& ParamInfo : VectorParamInfos)
 		{
 			FLinearColor OutColor(ForceInitToZero);
-			UMaterialEditingLibrary::GetVectorParameterValue(MatIface, Name, OutColor);
+			MatIface->GetVectorParameterValue(FHashedMaterialParameterInfo(ParamInfo), OutColor);
 
 			TSharedPtr<FJsonObject> ColorObj = MakeShared<FJsonObject>();
 			ColorObj->SetNumberField(TEXT("r"), static_cast<double>(OutColor.R));
@@ -152,7 +155,7 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 			DefaultColorObj->SetNumberField(TEXT("a"), static_cast<double>(OutColor.A));
 
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-			Entry->SetStringField(TEXT("name"), Name.ToString());
+			Entry->SetStringField(TEXT("name"), ParamInfo.Name.ToString());
 			Entry->SetStringField(TEXT("type"), TEXT("vector"));
 			Entry->SetObjectField(TEXT("value"), ColorObj);
 			Entry->SetObjectField(TEXT("default_value"), DefaultColorObj);
@@ -160,15 +163,15 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 		}
 
 		// Texture parameters.
-		for (const FName& Name : TextureNames)
+		for (const FMaterialParameterInfo& ParamInfo : TextureParamInfos)
 		{
 			UTexture* OutTexture = nullptr;
-			UMaterialEditingLibrary::GetTextureParameterValue(MatIface, Name, OutTexture);
+			MatIface->GetTextureParameterValue(FHashedMaterialParameterInfo(ParamInfo), OutTexture);
 
 			const FString TexPath = OutTexture ? OutTexture->GetPathName() : FString(TEXT(""));
 
 			TSharedPtr<FJsonObject> Entry = MakeShared<FJsonObject>();
-			Entry->SetStringField(TEXT("name"), Name.ToString());
+			Entry->SetStringField(TEXT("name"), ParamInfo.Name.ToString());
 			Entry->SetStringField(TEXT("type"), TEXT("texture"));
 			Entry->SetStringField(TEXT("value"), TexPath);
 			Entry->SetStringField(TEXT("default_value"), TexPath);
@@ -238,11 +241,16 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Create the material instance asset.
-		// UMaterialEditingLibrary::CreateMaterialInstanceAsset(ParentMaterial, Name, PackagePath)
-		// PackagePath is the directory (e.g., "/Game/Materials"), Name is the asset name.
-		UMaterialInstanceConstant* NewInst = Cast<UMaterialInstanceConstant>(
-			UMaterialEditingLibrary::CreateMaterialInstanceAsset(Parent, InstanceName, InstancePath));
+		// Create the material instance asset using AssetTools.
+		IAssetTools& AT = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+		UClass* MICFactoryClass = FindFirstObject<UClass>(TEXT("MaterialInstanceConstantFactoryNew"), EFindFirstObjectOptions::NativeFirst);
+		UFactory* MICFactory = MICFactoryClass ? NewObject<UFactory>(GetTransientPackage(), MICFactoryClass) : nullptr;
+		UObject* NewAsset = AT.CreateAsset(InstanceName, InstancePath, UMaterialInstanceConstant::StaticClass(), MICFactory);
+		UMaterialInstanceConstant* NewInst = Cast<UMaterialInstanceConstant>(NewAsset);
+		if (NewInst)
+		{
+			NewInst->SetParentEditorOnly(Parent);
+		}
 
 		if (!NewInst)
 		{
@@ -328,7 +336,7 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 			double Val = 0.0;
 			if (Payload->TryGetNumberField(TEXT("value"), Val))
 			{
-				UMaterialEditingLibrary::SetScalarParameterValue(MIC, FName(*ParamName), static_cast<float>(Val));
+				MIC->SetScalarParameterValueEditorOnly(FMaterialParameterInfo(FName(*ParamName)), static_cast<float>(Val));
 			}
 		}
 		else if (bIsVector)
@@ -341,8 +349,8 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 				(*ValObj)->TryGetNumberField(TEXT("g"), G);
 				(*ValObj)->TryGetNumberField(TEXT("b"), B);
 				(*ValObj)->TryGetNumberField(TEXT("a"), A);
-				UMaterialEditingLibrary::SetVectorParameterValue(
-					MIC, FName(*ParamName), FLinearColor(
+				MIC->SetVectorParameterValueEditorOnly(
+					FMaterialParameterInfo(FName(*ParamName)), FLinearColor(
 						static_cast<float>(R),
 						static_cast<float>(G),
 						static_cast<float>(B),
@@ -354,7 +362,7 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 			FString TexPath;
 			if (Payload->TryGetStringField(TEXT("value"), TexPath) && !TexPath.IsEmpty())
 			{
-				// Threat T-15-04: null-check before calling SetTextureParameterValue.
+				// Threat T-15-04: null-check before calling SetTextureParameterValueEditorOnly.
 				UTexture* Tex = Cast<UTexture>(
 					StaticLoadObject(UTexture::StaticClass(), nullptr, *TexPath));
 				if (!Tex)
@@ -362,7 +370,7 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 					SendResponse(BuildMatErrorResponse(CorrId, TEXT("texture_not_found")) + TEXT("\n"));
 					return;
 				}
-				UMaterialEditingLibrary::SetTextureParameterValue(MIC, FName(*ParamName), Tex);
+				MIC->SetTextureParameterValueEditorOnly(FMaterialParameterInfo(FName(*ParamName)), Tex);
 			}
 		}
 
@@ -456,9 +464,10 @@ void RegisterMaterialCommands(FMCPCommandRouter& Router)
 				{
 					continue;
 				}
-				TArray<UMaterialInterface*> Mats = Comp->GetMaterials();
-				for (UMaterialInterface* Mat : Mats)
+				const int32 NumMats = Comp->GetNumMaterials();
+				for (int32 MatIdx = 0; MatIdx < NumMats; ++MatIdx)
 				{
+					UMaterialInterface* Mat = Comp->GetMaterial(MatIdx);
 					if (Mat)
 					{
 						Unique.Add(Mat->GetPathName());

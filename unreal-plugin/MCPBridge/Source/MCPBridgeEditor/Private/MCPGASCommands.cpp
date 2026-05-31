@@ -226,19 +226,35 @@ static void HandleGasAbilities(TSharedPtr<FJsonObject> Cmd, FMCPResponseSender S
 		AbilityObj->SetArrayField(TEXT("ability_tags"),
 			GameplayTagContainerToJsonArray(AbilityCDO->AbilityTags));
 
-		// Cancel / block tags
-		AbilityObj->SetArrayField(TEXT("cancel_abilities_with_tag"),
-			GameplayTagContainerToJsonArray(AbilityCDO->CancelAbilitiesWithTag));
-		AbilityObj->SetArrayField(TEXT("block_abilities_with_tag"),
-			GameplayTagContainerToJsonArray(AbilityCDO->BlockAbilitiesWithTag));
+		// Cancel / block tags (protected in UE 5.7, read via UE reflection)
+		{
+			TArray<TSharedPtr<FJsonValue>> CancelTagsArray;
+			TArray<TSharedPtr<FJsonValue>> BlockTagsArray;
+			if (FStructProperty* CancelProp = CastField<FStructProperty>(AbilityCDO->GetClass()->FindPropertyByName(TEXT("CancelAbilitiesWithTag"))))
+			{
+				const FGameplayTagContainer* CancelTags = CancelProp->ContainerPtrToValuePtr<FGameplayTagContainer>(AbilityCDO);
+				if (CancelTags)
+				{
+					CancelTagsArray = GameplayTagContainerToJsonArray(*CancelTags);
+				}
+			}
+			if (FStructProperty* BlockProp = CastField<FStructProperty>(AbilityCDO->GetClass()->FindPropertyByName(TEXT("BlockAbilitiesWithTag"))))
+			{
+				const FGameplayTagContainer* BlockTags = BlockProp->ContainerPtrToValuePtr<FGameplayTagContainer>(AbilityCDO);
+				if (BlockTags)
+				{
+					BlockTagsArray = GameplayTagContainerToJsonArray(*BlockTags);
+				}
+			}
+			AbilityObj->SetArrayField(TEXT("cancel_abilities_with_tag"), CancelTagsArray);
+			AbilityObj->SetArrayField(TEXT("block_abilities_with_tag"), BlockTagsArray);
+		}
 
 		// Cost and cooldown GE class references
-		FString CostGEName = AbilityCDO->CostGameplayEffectClass
-			? AbilityCDO->CostGameplayEffectClass->GetName()
-			: TEXT("None");
-		FString CooldownGEName = AbilityCDO->CooldownGameplayEffectClass
-			? AbilityCDO->CooldownGameplayEffectClass->GetName()
-			: TEXT("None");
+		UGameplayEffect* CostGE = AbilityCDO->GetCostGameplayEffect();
+		FString CostGEName = CostGE ? CostGE->GetClass()->GetName() : TEXT("None");
+		UGameplayEffect* CooldownGE = AbilityCDO->GetCooldownGameplayEffect();
+		FString CooldownGEName = CooldownGE ? CooldownGE->GetClass()->GetName() : TEXT("None");
 		AbilityObj->SetStringField(TEXT("cost_gameplay_effect_class"), CostGEName);
 		AbilityObj->SetStringField(TEXT("cooldown_gameplay_effect_class"), CooldownGEName);
 
@@ -415,13 +431,17 @@ static void HandleGasEffects(TSharedPtr<FJsonObject> Cmd, FMCPResponseSender Sen
 	Data->SetNumberField(TEXT("stack_limit_count"), (double)GEObj->StackLimitCount);
 
 	// Period interval (period is a FScalableFloat, extract base value)
-	float PeriodValue = 0.0f;
-	GEObj->Period.GetStaticValue(PeriodValue);
+	float PeriodValue = GEObj->Period.GetValue();
 	Data->SetNumberField(TEXT("period_interval"), (double)PeriodValue);
 
-	// Gameplay Cue tags
+	// Gameplay Cue tags (collected from all FGameplayEffectCue entries)
+	FGameplayTagContainer AllCueTags;
+	for (const FGameplayEffectCue& Cue : GEObj->GameplayCues)
+	{
+		AllCueTags.AppendTags(Cue.GameplayCueTags);
+	}
 	Data->SetArrayField(TEXT("gameplay_cue_tags"),
-		GameplayTagContainerToJsonArray(GEObj->GameplayCueTags));
+		GameplayTagContainerToJsonArray(AllCueTags));
 
 	SendResponse(BuildGASSuccessResponse(CorrId, Data) + TEXT("\n"));
 }

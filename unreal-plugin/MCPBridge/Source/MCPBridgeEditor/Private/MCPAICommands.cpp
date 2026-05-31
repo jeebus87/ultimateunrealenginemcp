@@ -112,19 +112,22 @@ static TSharedPtr<FJsonObject> BuildBTCompositeNodeJson(UBTCompositeNode* Compos
 	NodeObj->SetStringField(TEXT("node_class"), Composite->GetClass()->GetName());
 	NodeObj->SetStringField(TEXT("node_type"), TEXT("Composite"));
 
-	// Build decorators array.
+	// Build decorators array from all children's decorators.
 	TArray<TSharedPtr<FJsonValue>> DecoratorsArray;
-	for (UBTDecorator* Decorator : Composite->Decorators)
+	for (const FBTCompositeChild& Child : Composite->Children)
 	{
-		if (!Decorator)
+		for (UBTDecorator* Decorator : Child.Decorators)
 		{
-			continue;
+			if (!Decorator)
+			{
+				continue;
+			}
+			TSharedPtr<FJsonObject> DecObj = MakeShared<FJsonObject>();
+			DecObj->SetStringField(TEXT("node_name"), Decorator->GetNodeName());
+			DecObj->SetStringField(TEXT("node_class"), Decorator->GetClass()->GetName());
+			DecObj->SetStringField(TEXT("node_type"), TEXT("Decorator"));
+			DecoratorsArray.Add(MakeShared<FJsonValueObject>(DecObj));
 		}
-		TSharedPtr<FJsonObject> DecObj = MakeShared<FJsonObject>();
-		DecObj->SetStringField(TEXT("node_name"), Decorator->GetNodeName());
-		DecObj->SetStringField(TEXT("node_class"), Decorator->GetClass()->GetName());
-		DecObj->SetStringField(TEXT("node_type"), TEXT("Decorator"));
-		DecoratorsArray.Add(MakeShared<FJsonValueObject>(DecObj));
 	}
 	NodeObj->SetArrayField(TEXT("decorators"), DecoratorsArray);
 
@@ -680,7 +683,7 @@ void RegisterAICommands(FMCPCommandRouter& Router)
 
 		// Iterate the Options array.
 		TArray<TSharedPtr<FJsonValue>> OptionsArray;
-		for (UEnvQueryOption* Option : Query->Options)
+		for (UEnvQueryOption* Option : Query->GetOptions())
 		{
 			if (!Option)
 			{
@@ -821,7 +824,7 @@ void RegisterAICommands(FMCPCommandRouter& Router)
 		}
 
 		// Get the main navigation data (e.g., RecastNavMesh).
-		ANavigationData* NavData = NavSys->GetMainNavData();
+		ANavigationData* NavData = NavSys->GetDefaultNavDataInstance(FNavigationSystem::DontCreate);
 
 		FString BuildStatus = TEXT("not_built");
 		FString NavDataClass = TEXT("None");

@@ -190,8 +190,8 @@ void RegisterNetworkingCommands(FMCPCommandRouter& Router)
 		Data->SetBoolField(TEXT("bNetUseOwnerRelevancy"),   TargetActor->bNetUseOwnerRelevancy);
 		Data->SetBoolField(TEXT("bReplicateMovement"),      TargetActor->IsReplicatingMovement());
 		Data->SetBoolField(TEXT("bOnlyRelevantToOwner"),    TargetActor->bOnlyRelevantToOwner);
-		Data->SetNumberField(TEXT("NetUpdateFrequency"),    static_cast<double>(TargetActor->NetUpdateFrequency));
-		Data->SetNumberField(TEXT("MinNetUpdateFrequency"), static_cast<double>(TargetActor->MinNetUpdateFrequency));
+		Data->SetNumberField(TEXT("NetUpdateFrequency"),    static_cast<double>(TargetActor->GetNetUpdateFrequency()));
+		Data->SetNumberField(TEXT("MinNetUpdateFrequency"), static_cast<double>(TargetActor->GetMinNetUpdateFrequency()));
 		Data->SetNumberField(TEXT("NetPriority"),           static_cast<double>(TargetActor->NetPriority));
 		Data->SetNumberField(TEXT("NetDormancy"),           static_cast<double>(static_cast<int32>(TargetActor->NetDormancy)));
 		Data->SetStringField(TEXT("NetDormancyName"),       NetDormancyToString(TargetActor->NetDormancy));
@@ -353,7 +353,7 @@ void RegisterNetworkingCommands(FMCPCommandRouter& Router)
 		const ENetMode NetMode    = NetDriver->GetNetMode();
 		const bool bIsServer      = (NetMode == NM_DedicatedServer || NetMode == NM_ListenServer);
 		const int32 ConnCount     = NetDriver->ClientConnections.Num();
-		const int32 MaxChannels   = NetDriver->MaxChannelsOverride > 0 ? NetDriver->MaxChannelsOverride : NetDriver->MaxChannels;
+		const int32 MaxChannels   = NetDriver->GetMaxChannelsOverride();
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("driver_name"),      DriverName);
@@ -469,7 +469,7 @@ void RegisterNetworkingCommands(FMCPCommandRouter& Router)
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("subsystem_name"), SubsystemName);
-		Data->SetStringField(TEXT("session_name"),   NAME_GameSession.ToString());
+		Data->SetStringField(TEXT("session_name"),   TEXT("GameSession"));
 		Data->SetStringField(TEXT("session_state"),  StateStr);
 		Data->SetNumberField(TEXT("max_players"),    static_cast<double>(MaxPlayers));
 		Data->SetNumberField(TEXT("current_players"), static_cast<double>(NumPlayers));

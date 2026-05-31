@@ -9,6 +9,7 @@
 #include "MCPEditorStateCommands.h"
 
 #include "Editor.h"
+#include "Selection.h"
 #include "EditorViewportClient.h"
 #include "LevelEditorViewport.h"
 #include "EngineUtils.h"

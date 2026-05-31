@@ -12,7 +12,7 @@
 
 // Blueprint APIs
 #include "Engine/Blueprint.h"
-#include "BlueprintEditorUtils.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
 #include "EdGraph/EdGraphPin.h"
@@ -28,7 +28,7 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "AssetRegistry/AssetData.h"
-#include "Blueprint/BlueprintTags.h"
+#include "Blueprint/BlueprintSupport.h"
 
 // JSON APIs
 #include "Dom/JsonObject.h"

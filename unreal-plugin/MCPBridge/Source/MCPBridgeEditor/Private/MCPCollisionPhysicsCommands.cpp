@@ -21,7 +21,7 @@
 #include "EngineUtils.h"
 #include "Components/PrimitiveComponent.h"
 #include "Engine/EngineTypes.h"
-#include "CollisionProfile.h"
+#include "Engine/CollisionProfile.h"
 #include "PhysicsEngine/BodyInstance.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "PhysicsEngine/PhysicsAsset.h"
@@ -118,7 +118,7 @@ static TArray<TSharedPtr<FJsonValue>> BuildCollisionResponseArray(UPrimitiveComp
 		if (Profile)
 		{
 			// GetChannelName returns the display name for a given channel index.
-			ChannelName = Profile->GetChannelName(Channel).ToString();
+			ChannelName = Profile->ReturnChannelNameFromContainerIndex(static_cast<int32>(Channel)).ToString();
 		}
 		if (ChannelName.IsEmpty())
 		{
@@ -148,7 +148,7 @@ static TSharedPtr<FJsonObject> BuildCollisionData(UPrimitiveComponent* Comp)
 	FString ObjectTypeName;
 	if (Profile)
 	{
-		ObjectTypeName = Profile->GetChannelName(ObjCh).ToString();
+		ObjectTypeName = Profile->ReturnChannelNameFromContainerIndex(static_cast<int32>(ObjCh)).ToString();
 	}
 	if (ObjectTypeName.IsEmpty())
 	{

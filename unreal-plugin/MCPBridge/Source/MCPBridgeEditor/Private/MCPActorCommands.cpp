@@ -177,10 +177,10 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 		}
 
 		// Find actor class by name; try exact name then A-prefixed name.
-		UClass* ActorClass = FindObject<UClass>(ANY_PACKAGE, *ClassName);
+		UClass* ActorClass = FindFirstObject<UClass>( *ClassName);
 		if (!ActorClass)
 		{
-			ActorClass = FindObject<UClass>(ANY_PACKAGE, *(TEXT("A") + ClassName));
+			ActorClass = FindFirstObject<UClass>( *(TEXT("A") + ClassName));
 		}
 		if (!ActorClass)
 		{
