@@ -201,12 +201,11 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 		const FVector   Location(X, Y, Z);
 		const FRotator  Rotation(0.0, 0.0, 0.0);
 
-		// Optional label — sets the editor display name after spawn.
+		// Optional label — applied AFTER spawn via SetActorLabel().
+		// Do NOT set Params.Name — UE's name-uniqueness check can fatal-error
+		// when the requested FName collides with internal naming patterns.
 		FString Label;
-		if (Payload->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
-		{
-			Params.Name = FName(*Label);
-		}
+		Payload->TryGetStringField(TEXT("label"), Label);
 
 		AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Location, Rotation, Params);
 		if (!Spawned)
