@@ -207,13 +207,28 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 		return FString();
 	}
 
-	// Force the viewport to redraw so we capture the current frame.
+	// Enable realtime rendering so the viewport actually renders frames.
+	// Without this, the editor viewport only renders when "dirty" and
+	// ReadPixels captures a stale/blank framebuffer.
+	const bool bWasRealtime = ViewportClient->IsRealtime();
+	ViewportClient->SetRealtime(true);
+
+	// Force a full viewport redraw. Invalidate marks it dirty,
+	// then Draw executes the render pipeline synchronously.
 	ViewportClient->Viewport->Invalidate();
 	ViewportClient->Viewport->Draw();
 
 	// Read pixels from the viewport framebuffer.
 	TArray<FColor> Pixels;
-	if (!ViewportClient->Viewport->ReadPixels(Pixels))
+	const bool bReadOk = ViewportClient->Viewport->ReadPixels(Pixels);
+
+	// Restore previous realtime state.
+	if (!bWasRealtime)
+	{
+		ViewportClient->SetRealtime(false);
+	}
+
+	if (!bReadOk)
 	{
 		return FString();
 	}
