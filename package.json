@@ -1,6 +1,6 @@
 {
   "name": "ultimate-unreal-engine-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server giving AI assistants full access to Unreal Engine 5.7 projects",
   "type": "module",
   "engines": {
