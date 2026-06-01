@@ -1,9 +1,11 @@
 // MCPActorCommands.cpp
-// Implements four actor command handlers for the MCP bridge:
-//   actor.list    -- enumerate all actors in the open level
-//   actor.spawn   -- spawn an actor by class name at a given location
-//   actor.transform -- move/rotate/scale an actor by label
-//   actor.delete  -- remove an actor from the level
+// Implements actor command handlers for the MCP bridge:
+//   actor.list           -- enumerate all actors in the open level
+//   actor.spawn          -- spawn an actor by class name at a given location
+//   actor.transform      -- move/rotate/scale an actor by label
+//   actor.delete         -- remove an actor from the level
+//   actor.setProperty    -- set a UPROPERTY on an actor or component
+//   actor.componentBounds -- get bounds of individual components on an actor
 //
 // All handlers run on the game thread (guaranteed by FMCPCommandRouter::Dispatch).
 // actor.transform and actor.delete call Actor->Modify() before any state change
@@ -631,6 +633,104 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 		Data->SetStringField(TEXT("property"), PropertyName);
 		Data->SetStringField(TEXT("value_type"), ValueType);
 		Data->SetBoolField(TEXT("applied"), true);
+
+		SendResponse(BuildActorSuccessResponse(CorrId, Data) + TEXT("\n"));
+	});
+
+	// -----------------------------------------------------------------------
+	// actor.componentBounds
+	// Returns bounds of each scene component on an actor, or a specific one.
+	// Payload: { actor_label, component_name? }
+	// If component_name is omitted, returns all scene components with bounds.
+	// -----------------------------------------------------------------------
+	Router.RegisterHandler(TEXT("actor.componentBounds"), [](TSharedPtr<FJsonObject> Cmd, FMCPResponseSender SendResponse)
+	{
+		const FString CorrId = Cmd->GetStringField(TEXT("correlationId"));
+
+		TSharedPtr<FJsonObject> Payload;
+		const TSharedPtr<FJsonValue>* PayloadVal = Cmd->Values.Find(TEXT("payload"));
+		if (PayloadVal && (*PayloadVal)->Type == EJson::Object)
+		{
+			Payload = (*PayloadVal)->AsObject();
+		}
+
+		FString ActorLabel;
+		if (!Payload.IsValid()
+			|| !Payload->TryGetStringField(TEXT("actor_label"), ActorLabel) || ActorLabel.IsEmpty())
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("missing_actor_label")) + TEXT("\n"));
+			return;
+		}
+
+		FString FilterComponent;
+		Payload->TryGetStringField(TEXT("component_name"), FilterComponent);
+
+		UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (!World)
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("no_world_open")) + TEXT("\n"));
+			return;
+		}
+
+		AActor* TargetActor = nullptr;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if ((*It)->GetActorLabel() == ActorLabel)
+			{
+				TargetActor = *It;
+				break;
+			}
+		}
+		if (!TargetActor)
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("actor_not_found")) + TEXT("\n"));
+			return;
+		}
+
+		TArray<TSharedPtr<FJsonValue>> ComponentsArray;
+
+		TInlineComponentArray<USceneComponent*> Components;
+		TargetActor->GetComponents(Components);
+
+		for (USceneComponent* Comp : Components)
+		{
+			if (!Comp) continue;
+			if (!FilterComponent.IsEmpty() && Comp->GetName() != FilterComponent) continue;
+
+			FBoxSphereBounds Bounds = Comp->CalcBounds(Comp->GetComponentTransform());
+
+			TSharedPtr<FJsonObject> CompObj = MakeShared<FJsonObject>();
+			CompObj->SetStringField(TEXT("name"), Comp->GetName());
+			CompObj->SetStringField(TEXT("class"), Comp->GetClass()->GetName());
+
+			// World-space bounds
+			TSharedPtr<FJsonObject> OriginObj = MakeShared<FJsonObject>();
+			OriginObj->SetNumberField(TEXT("x"), Bounds.Origin.X);
+			OriginObj->SetNumberField(TEXT("y"), Bounds.Origin.Y);
+			OriginObj->SetNumberField(TEXT("z"), Bounds.Origin.Z);
+			CompObj->SetObjectField(TEXT("origin"), OriginObj);
+
+			TSharedPtr<FJsonObject> ExtentObj = MakeShared<FJsonObject>();
+			ExtentObj->SetNumberField(TEXT("x"), Bounds.BoxExtent.X);
+			ExtentObj->SetNumberField(TEXT("y"), Bounds.BoxExtent.Y);
+			ExtentObj->SetNumberField(TEXT("z"), Bounds.BoxExtent.Z);
+			CompObj->SetObjectField(TEXT("extent"), ExtentObj);
+
+			// Relative transform
+			FVector RelLoc = Comp->GetRelativeLocation();
+			TSharedPtr<FJsonObject> RelLocObj = MakeShared<FJsonObject>();
+			RelLocObj->SetNumberField(TEXT("x"), RelLoc.X);
+			RelLocObj->SetNumberField(TEXT("y"), RelLoc.Y);
+			RelLocObj->SetNumberField(TEXT("z"), RelLoc.Z);
+			CompObj->SetObjectField(TEXT("relative_location"), RelLocObj);
+
+			ComponentsArray.Add(MakeShared<FJsonValueObject>(CompObj));
+		}
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("label"), ActorLabel);
+		Data->SetArrayField(TEXT("components"), ComponentsArray);
+		Data->SetNumberField(TEXT("count"), static_cast<double>(ComponentsArray.Num()));
 
 		SendResponse(BuildActorSuccessResponse(CorrId, Data) + TEXT("\n"));
 	});

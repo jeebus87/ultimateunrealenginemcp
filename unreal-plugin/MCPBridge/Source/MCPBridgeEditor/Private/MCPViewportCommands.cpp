@@ -32,6 +32,7 @@
 #include "Misc/DateTime.h"
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
+#include "ImageUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "EngineUtils.h"
@@ -186,10 +187,11 @@ static FString GetMCPScreenshotDir()
 }
 
 /**
- * Queues an MCP screenshot with the given dimensions and returns the target file path.
+ * Captures an MCP screenshot synchronously using FViewport::ReadPixels().
  *
- * Uses the naming convention mcp_screenshot_{timestamp}.png in the MCPScreenshots directory.
- * Screenshot capture is asynchronous -- the file may not exist immediately after this call.
+ * Unlike FScreenshotRequest (async, one-shot per render, unreliable for repeated calls),
+ * this forces a viewport redraw and reads the framebuffer directly.
+ * Returns the file path on success, or empty string on failure.
  *
  * Threat T-31-05: width clamped 64..7680, height clamped 64..4320 (same as T-12-06).
  */
@@ -199,13 +201,41 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 	Width  = FMath::Clamp(Width,  64, 7680);
 	Height = FMath::Clamp(Height, 64, 4320);
 
+	FLevelEditorViewportClient* ViewportClient = GetActiveViewportClient();
+	if (!ViewportClient || !ViewportClient->Viewport)
+	{
+		return FString();
+	}
+
+	// Force the viewport to redraw so we capture the current frame.
+	ViewportClient->Viewport->Invalidate();
+	ViewportClient->Viewport->Draw();
+
+	// Read pixels from the viewport framebuffer.
+	TArray<FColor> Pixels;
+	if (!ViewportClient->Viewport->ReadPixels(Pixels))
+	{
+		return FString();
+	}
+
+	const int32 VPWidth  = ViewportClient->Viewport->GetSizeXY().X;
+	const int32 VPHeight = ViewportClient->Viewport->GetSizeXY().Y;
+
+	if (Pixels.Num() != VPWidth * VPHeight || VPWidth == 0 || VPHeight == 0)
+	{
+		return FString();
+	}
+
+	// Compress to PNG.
+	TArray64<uint8> PngData;
+	FImageUtils::PNGCompressImageArray(VPWidth, VPHeight, Pixels, PngData);
+
+	// Write to file.
 	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%s"));
 	const FString FileName  = FString::Printf(TEXT("mcp_screenshot_%s.png"), *Timestamp);
 	const FString FilePath  = FPaths::Combine(GetMCPScreenshotDir(), FileName);
 
-	GScreenshotResolutionX = Width;
-	GScreenshotResolutionY = Height;
-	FScreenshotRequest::RequestScreenshot(FilePath, false /* bShowUI */, false /* bAddFilenameSuffix */);
+	FFileHelper::SaveArrayToFile(PngData, *FilePath);
 
 	return FilePath;
 }
@@ -301,14 +331,20 @@ void RegisterViewportCommands(FMCPCommandRouter& Router)
 			}
 		}
 
-		// Use TakeScreenshotToFile which writes to MCPScreenshots/ with a known path.
+		// Synchronous capture via ReadPixels — works reliably for repeated calls.
 		const FString FilePath = TakeScreenshotToFile(Width, Height);
+
+		if (FilePath.IsEmpty())
+		{
+			SendResponse(BuildViewportErrorResponse(CorrId, TEXT("screenshot_capture_failed")) + TEXT("\n"));
+			return;
+		}
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("file_path"), FilePath);
 		Data->SetNumberField(TEXT("width"),  static_cast<double>(Width));
 		Data->SetNumberField(TEXT("height"), static_cast<double>(Height));
-		Data->SetBoolField(TEXT("queued"), true);
+		Data->SetBoolField(TEXT("saved"), true);
 
 		SendResponse(BuildViewportSuccessResponse(CorrId, Data) + TEXT("\n"));
 	});
