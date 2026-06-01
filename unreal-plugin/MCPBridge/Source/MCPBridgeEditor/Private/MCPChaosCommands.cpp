@@ -525,11 +525,20 @@ void RegisterChaosCommands(FMCPCommandRouter& Router)
 		TArray<TSharedPtr<FJsonValue>> ClothAssetsArray;
 
 		// Iterate clothing assets on the skeletal mesh.
-		// USkeletalMesh::GetMeshClothingAssets() returns TArray<UClothingAssetBase*>.
-		// UClothingAssetBase is defined in Engine module -- no ClothingAsset.h needed for the base class.
-		// UClothingAssetCommon with ClothConfigs is in ClothingSystemRuntimeCommon -- use reflection.
-		for (UClothingAssetBase* ClothAssetBase : SkelMesh->GetMeshClothingAssets())
+		// USkeletalMesh::GetMeshClothingAssets() returns TArray<TObjectPtr<UClothingAssetBase>>&.
+		// UClothingAssetBase is only forward-declared in SkeletalMesh.h (full definition is in
+		// ClothingSystemRuntimeInterface module which is not linked). We access the raw
+		// MeshClothingAssets UPROPERTY via reflection to iterate as UObject*.
+		FArrayProperty* ClothArrayProp = CastField<FArrayProperty>(SkelMesh->GetClass()->FindPropertyByName(TEXT("MeshClothingAssets")));
+		int32 ClothAssetCount = 0;
+		if (ClothArrayProp)
 		{
+			FScriptArrayHelper ArrayHelper(ClothArrayProp, ClothArrayProp->ContainerPtrToValuePtr<void>(SkelMesh));
+			ClothAssetCount = ArrayHelper.Num();
+			FObjectProperty* ElemProp = CastField<FObjectProperty>(ClothArrayProp->Inner);
+			for (int32 ClothIdx = 0; ClothIdx < ClothAssetCount && ElemProp; ++ClothIdx)
+			{
+				UObject* ClothAssetBase = ElemProp->GetObjectPropertyValue(ArrayHelper.GetElementPtr(ClothIdx));
 			if (!ClothAssetBase)
 			{
 				continue;
@@ -541,7 +550,13 @@ void RegisterChaosCommands(FMCPCommandRouter& Router)
 			// Access ClothConfigs via reflection (avoids UClothingAssetCommon.h include).
 			// ClothConfigs is a TMap<FName, UClothConfigBase*> on UClothingAssetCommon.
 			FMapProperty* ClothConfigsProp = CastField<FMapProperty>(ClothAssetBase->GetClass()->FindPropertyByName(TEXT("ClothConfigs")));
-			if (!ClothConfigsProp || ClothConfigsProp->IsEmpty_InContainer(ClothAssetBase))
+			bool bMapEmpty = true;
+			if (ClothConfigsProp)
+			{
+				FScriptMapHelper MapCheck(ClothConfigsProp, ClothConfigsProp->ContainerPtrToValuePtr<void>(ClothAssetBase));
+				bMapEmpty = (MapCheck.Num() == 0);
+			}
+			if (!ClothConfigsProp || bMapEmpty)
 			{
 				// No config data available -- report zeros with a note.
 				ClothObj->SetNumberField(TEXT("self_collision_thickness"), 0.0);
@@ -642,6 +657,7 @@ void RegisterChaosCommands(FMCPCommandRouter& Router)
 			}
 
 			ClothAssetsArray.Add(MakeShared<FJsonValueObject>(ClothObj));
+			}
 		}
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

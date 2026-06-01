@@ -26,13 +26,9 @@
 #include "Animation/BlendSpace1D.h"
 #include "Animation/AnimSequence.h"
 
-// AnimGraph headers for state machine node access
-// These are part of the AnimGraph editor module, available transitively via
-// BlueprintGraph/Kismet in Build.cs for editor builds.
-#include "AnimGraphNode_StateMachine.h"
-#include "AnimationStateMachineGraph.h"
-#include "AnimStateNode.h"
-#include "AnimStateTransitionNode.h"
+// AnimGraph state machine classes accessed via reflection (AnimGraph module not linked).
+// We use FindObject<UClass> + FProperty reflection to access node titles, state names,
+// transition data, and graph connections without compile-time AnimGraph dependency.
 
 // Asset Registry
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -235,25 +231,14 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 			SkeletonPath = AnimBP->TargetSkeleton->GetPathName();
 		}
 
-		// Collect state machine information by iterating FunctionGraphs and AnimationGraphs.
-		// UAnimBlueprint stores its animation nodes in the AnimationGraph (UEdGraph).
+		// Collect state machine information using reflection (AnimGraph module not linked).
+		// We find UAnimGraphNode_StateMachine class at runtime and check node types by class name.
 		TArray<TSharedPtr<FJsonValue>> StateMachinesArray;
 
-		// Iterate all graphs in the AnimBlueprint to find state machine graphs.
-		TArray<UEdGraph*> AllGraphs;
-		AllGraphs.Append(AnimBP->FunctionGraphs);
-		if (AnimBP->UbergraphPages.Num() > 0)
-		{
-			AllGraphs.Append(AnimBP->UbergraphPages);
-		}
-		// Also check AnimationGraph specifically.
-		for (UEdGraph* Graph : AnimBP->FunctionGraphs)
-		{
-			if (Graph)
-			{
-				AllGraphs.AddUnique(Graph);
-			}
-		}
+		// Find AnimGraph classes via reflection.
+		UClass* SMNodeClass = FindObject<UClass>(nullptr, TEXT("/Script/AnimGraph.AnimGraphNode_StateMachine"));
+		UClass* StateNodeClass = FindObject<UClass>(nullptr, TEXT("/Script/AnimGraph.AnimStateNode"));
+		UClass* TransitionNodeClass = FindObject<UClass>(nullptr, TEXT("/Script/AnimGraph.AnimStateTransitionNode"));
 
 		// Iterate all node graphs in the Blueprint looking for state machine nodes.
 		TArray<UEdGraph*> AllBPGraphs;
@@ -268,20 +253,25 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 
 			for (UEdGraphNode* Node : Graph->Nodes)
 			{
-				UAnimGraphNode_StateMachine* SMNode = Cast<UAnimGraphNode_StateMachine>(Node);
-				if (!SMNode)
+				if (!Node || !SMNodeClass || !Node->IsA(SMNodeClass))
 				{
 					continue;
 				}
 
-				FString SMName = SMNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
+				FString SMName = Node->GetNodeTitle(ENodeTitleType::ListView).ToString();
 
 				// Collect states from the state machine graph.
 				TArray<TSharedPtr<FJsonValue>> StatesArray;
 				TArray<TSharedPtr<FJsonValue>> TransitionsArray;
 
-				// The state machine graph is referenced by EditorStateMachineGraph.
-				UEdGraph* SMGraph = Cast<UEdGraph>(SMNode->EditorStateMachineGraph.Get());
+				// Access EditorStateMachineGraph via reflection (FObjectProperty on the base class).
+				UEdGraph* SMGraph = nullptr;
+				FObjectProperty* SMGraphProp = CastField<FObjectProperty>(Node->GetClass()->FindPropertyByName(TEXT("EditorStateMachineGraph")));
+				if (SMGraphProp)
+				{
+					SMGraph = Cast<UEdGraph>(SMGraphProp->GetObjectPropertyValue_InContainer(Node));
+				}
+
 				if (SMGraph)
 				{
 					for (UEdGraphNode* SMSubNode : SMGraph->Nodes)
@@ -291,15 +281,38 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 							continue;
 						}
 
-						// Check if this is a state node.
-						UAnimStateNode* StateNode = Cast<UAnimStateNode>(SMSubNode);
-						if (StateNode)
+						// Check if this is a state node (UAnimStateNode).
+						if (StateNodeClass && SMSubNode->IsA(StateNodeClass))
 						{
-							FString StateName = StateNode->GetStateName();
+							// Get state name via GetStateName() -- call through reflection.
+							FString StateName;
+							UFunction* GetStateNameFunc = SMSubNode->GetClass()->FindFunctionByName(TEXT("GetStateName"));
+							if (GetStateNameFunc)
+							{
+								// GetStateName returns FString -- use ProcessEvent.
+								struct { FString ReturnValue; } Params;
+								SMSubNode->ProcessEvent(GetStateNameFunc, &Params);
+								StateName = Params.ReturnValue;
+							}
+							else
+							{
+								// Fallback: use node title.
+								StateName = SMSubNode->GetNodeTitle(ENodeTitleType::ListView).ToString();
+							}
+
 							FString AnimAssetPath;
 
 							// Try to get the animation sequence from the state's bound graph.
-							UEdGraph* StateGraph = StateNode->GetBoundGraph();
+							UFunction* GetBoundGraphFunc = SMSubNode->GetClass()->FindFunctionByName(TEXT("GetBoundGraph"));
+							UEdGraph* StateGraph = nullptr;
+							if (GetBoundGraphFunc)
+							{
+								struct { UEdGraph* ReturnValue; } GraphParams;
+								GraphParams.ReturnValue = nullptr;
+								SMSubNode->ProcessEvent(GetBoundGraphFunc, &GraphParams);
+								StateGraph = GraphParams.ReturnValue;
+							}
+
 							if (StateGraph)
 							{
 								for (UEdGraphNode* StateSubNode : StateGraph->Nodes)
@@ -331,13 +344,7 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 					// Collect transitions from state machine graph.
 					for (UEdGraphNode* SMSubNode : SMGraph->Nodes)
 					{
-						if (!SMSubNode)
-						{
-							continue;
-						}
-
-						UAnimStateTransitionNode* TransNode = Cast<UAnimStateTransitionNode>(SMSubNode);
-						if (!TransNode)
+						if (!SMSubNode || !TransitionNodeClass || !SMSubNode->IsA(TransitionNodeClass))
 						{
 							continue;
 						}
@@ -346,7 +353,7 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 						FString TargetState;
 
 						// Get source and target state names via pin connections.
-						for (UEdGraphPin* Pin : TransNode->Pins)
+						for (UEdGraphPin* Pin : SMSubNode->Pins)
 						{
 							if (!Pin)
 							{
@@ -354,26 +361,46 @@ void RegisterAnimationCommands(FMCPCommandRouter& Router)
 							}
 							if (Pin->Direction == EGPD_Input && Pin->LinkedTo.Num() > 0)
 							{
-								UAnimStateNode* LinkedState = Cast<UAnimStateNode>(Pin->LinkedTo[0]->GetOwningNode());
-								if (LinkedState)
+								UEdGraphNode* LinkedNode = Pin->LinkedTo[0]->GetOwningNode();
+								if (LinkedNode && StateNodeClass && LinkedNode->IsA(StateNodeClass))
 								{
-									SourceState = LinkedState->GetStateName();
+									UFunction* GetNameFunc = LinkedNode->GetClass()->FindFunctionByName(TEXT("GetStateName"));
+									if (GetNameFunc)
+									{
+										struct { FString ReturnValue; } P;
+										LinkedNode->ProcessEvent(GetNameFunc, &P);
+										SourceState = P.ReturnValue;
+									}
 								}
 							}
 							else if (Pin->Direction == EGPD_Output && Pin->LinkedTo.Num() > 0)
 							{
-								UAnimStateNode* LinkedState = Cast<UAnimStateNode>(Pin->LinkedTo[0]->GetOwningNode());
-								if (LinkedState)
+								UEdGraphNode* LinkedNode = Pin->LinkedTo[0]->GetOwningNode();
+								if (LinkedNode && StateNodeClass && LinkedNode->IsA(StateNodeClass))
 								{
-									TargetState = LinkedState->GetStateName();
+									UFunction* GetNameFunc = LinkedNode->GetClass()->FindFunctionByName(TEXT("GetStateName"));
+									if (GetNameFunc)
+									{
+										struct { FString ReturnValue; } P;
+										LinkedNode->ProcessEvent(GetNameFunc, &P);
+										TargetState = P.ReturnValue;
+									}
 								}
 							}
+						}
+
+						// Access CrossfadeDuration via reflection.
+						double Duration = 0.0;
+						FFloatProperty* DurationProp = CastField<FFloatProperty>(SMSubNode->GetClass()->FindPropertyByName(TEXT("CrossfadeDuration")));
+						if (DurationProp)
+						{
+							Duration = static_cast<double>(DurationProp->GetPropertyValue_InContainer(SMSubNode));
 						}
 
 						TSharedPtr<FJsonObject> TransObj = MakeShared<FJsonObject>();
 						TransObj->SetStringField(TEXT("source_state"), SourceState);
 						TransObj->SetStringField(TEXT("target_state"), TargetState);
-						TransObj->SetNumberField(TEXT("duration"), static_cast<double>(TransNode->CrossfadeDuration));
+						TransObj->SetNumberField(TEXT("duration"), Duration);
 						TransitionsArray.Add(MakeShared<FJsonValueObject>(TransObj));
 					}
 				}

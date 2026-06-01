@@ -54,7 +54,7 @@
 // UE reflection (for DataLayerEditorSubsystem access)
 #include "UObject/UnrealType.h"
 #include "UObject/PropertyPortFlags.h"
-#include "Subsystems/EditorSubsystem.h"
+#include "EditorSubsystem.h"
 
 // ---------------------------------------------------------------------------
 // Internal helpers

@@ -548,8 +548,12 @@ void RegisterLiveLinkCommands(FMCPCommandRouter& Router)
 										}
 										else if (FSoftClassProperty* SoftClassProp = CastField<FSoftClassProperty>(RoleProp))
 										{
-											TSoftClassPtr<UObject> SoftClass = SoftClassProp->GetPropertyValue_InContainer(Settings);
-											FString RoleClassName = SoftClass.ToSoftObjectPath().GetAssetName();
+											// FSoftClassProperty inherits from FSoftObjectProperty whose
+											// GetPropertyValue_InContainer returns FSoftObjectPtr (not
+											// TSoftClassPtr<UObject>).  Use the FSoftObjectProperty API
+											// to obtain the soft object path directly.
+											const FSoftObjectPtr& SoftPtr = SoftClassProp->GetPropertyValue_InContainer(Settings);
+											FString RoleClassName = SoftPtr.ToSoftObjectPath().GetAssetName();
 											if (!RoleClassName.IsEmpty())
 											{
 												RoleName = RoleClassNameToFriendlyName(RoleClassName);
