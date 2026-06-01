@@ -301,16 +301,11 @@ void RegisterViewportCommands(FMCPCommandRouter& Router)
 			}
 		}
 
-		// Set global screenshot resolution and queue capture.
-		GScreenshotResolutionX = Width;
-		GScreenshotResolutionY = Height;
-		FScreenshotRequest::RequestScreenshot(false /* bShowUI */);
-
-		// Return the directory where UE will write the screenshot file.
-		const FString ShotDir = FPaths::ScreenShotDir();
+		// Use TakeScreenshotToFile which writes to MCPScreenshots/ with a known path.
+		const FString FilePath = TakeScreenshotToFile(Width, Height);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
-		Data->SetStringField(TEXT("screenshot_dir"), ShotDir);
+		Data->SetStringField(TEXT("file_path"), FilePath);
 		Data->SetNumberField(TEXT("width"),  static_cast<double>(Width));
 		Data->SetNumberField(TEXT("height"), static_cast<double>(Height));
 		Data->SetBoolField(TEXT("queued"), true);
