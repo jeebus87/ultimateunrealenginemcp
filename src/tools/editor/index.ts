@@ -50,6 +50,43 @@ async function sendOrDisconnect(
 }
 
 // ---------------------------------------------------------------------------
+// autoVerifyBounds helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Queries actor.componentBounds after a mutation and appends verification
+ * data to the original result. If the verification call fails, the original
+ * result is returned unmodified (verification is best-effort).
+ */
+async function autoVerifyBounds(
+  bridge: PluginBridgeClient,
+  actorLabel: string,
+  originalResult: ToolResult
+): Promise<ToolResult> {
+  // Don't verify if the original command failed
+  if (originalResult.isError) return originalResult;
+  try {
+    const verifyResponse = await bridge.sendCommand({
+      type: 'actor.componentBounds',
+      payload: { actor_label: actorLabel },
+      correlationId: '',
+    });
+    const verifyData = verifyResponse.success
+      ? { _verification: { actor_label: actorLabel, bounds: verifyResponse.data } }
+      : { _verification: { actor_label: actorLabel, error: verifyResponse.error } };
+    return {
+      content: [
+        ...originalResult.content,
+        { type: 'text', text: JSON.stringify(verifyData) },
+      ],
+    };
+  } catch {
+    // Verification is best-effort; don't break the original result
+    return originalResult;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // registerEditorTools
 // ---------------------------------------------------------------------------
 
@@ -121,10 +158,16 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     withKnownIssues('ue_spawn_actor', async (args) => {
       const payload: Record<string, unknown> = { class_name: args.class_name, location: args.location };
       if (args.label) { payload['label'] = args.label; }
-      return sendOrDisconnect(_bridge, {
+      const result = await sendOrDisconnect(_bridge, {
         type: 'actor.spawn',
         payload,
       });
+      // Auto-verify: query bounds of the spawned actor
+      const label = args.label ?? (result.content?.[0] && 'text' in result.content[0]
+        ? (() => { try { return JSON.parse(result.content[0].text)?.actor_label; } catch { return undefined; } })()
+        : undefined);
+      if (label) return autoVerifyBounds(_bridge, label, result);
+      return result;
     })
   );
 
@@ -157,10 +200,12 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
         value_type: args.value_type,
       };
       if (args.component_name) { payload['component_name'] = args.component_name; }
-      return sendOrDisconnect(_bridge, {
+      const result = await sendOrDisconnect(_bridge, {
         type: 'actor.setProperty',
         payload,
       });
+      // Auto-verify: query bounds after property change
+      return autoVerifyBounds(_bridge, args.actor_label, result);
     })
   );
 
@@ -269,7 +314,9 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
       if (args.location) payload['location'] = args.location;
       if (args.rotation) payload['rotation'] = args.rotation;
       if (args.scale)    payload['scale']    = args.scale;
-      return sendOrDisconnect(_bridge, { type: 'actor.transform', payload });
+      const result = await sendOrDisconnect(_bridge, { type: 'actor.transform', payload });
+      // Auto-verify: query bounds after transform
+      return autoVerifyBounds(_bridge, args.actor_label, result);
     })
   );
 
@@ -291,10 +338,29 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
       },
     },
     withKnownIssues('ue_delete_actor', async (args) => {
-      return sendOrDisconnect(_bridge, {
+      const result = await sendOrDisconnect(_bridge, {
         type: 'actor.delete',
         payload: { actor_label: args.actor_label },
       });
+      // Auto-verify: confirm actor no longer exists
+      if (!result.isError) {
+        try {
+          const verifyResponse = await _bridge.sendCommand({
+            type: 'actor.list',
+            correlationId: '',
+          });
+          if (verifyResponse.success) {
+            const actors = verifyResponse.data as Record<string, unknown>;
+            return {
+              content: [
+                ...result.content,
+                { type: 'text', text: JSON.stringify({ _verification: { deleted: args.actor_label, remaining_actors: actors } }) },
+              ],
+            };
+          }
+        } catch { /* verification is best-effort */ }
+      }
+      return result;
     })
   );
 
@@ -379,6 +445,31 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     },
     withKnownIssues('ue_read_level_layout', async (_args) => {
       return sendOrDisconnect(_bridge, { type: 'level.layout' });
+    })
+  );
+
+  // --------------------------------------------------------------------------
+  // ue_get_component_bounds
+  // --------------------------------------------------------------------------
+  server.registerTool(
+    'ue_get_component_bounds',
+    {
+      title: 'Get Actor Component Bounds',
+      description:
+        '[requires_plugin] Get the world-space bounding box and transform of an actor and its components. Use this to verify spatial placement after spawning, transforming, or setting properties. Returns min/max bounds, center, and extent for each component.',
+      inputSchema: z.object({
+        actor_label: z.string().describe('The editor label of the actor to inspect'),
+        component_name: z.string().optional().describe('Optional: inspect a specific component only (e.g., DoorMesh, DoorCollision)'),
+      }),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+    },
+    withKnownIssues('ue_get_component_bounds', async (args) => {
+      const payload: Record<string, unknown> = { actor_label: args.actor_label };
+      if (args.component_name) { payload['component_name'] = args.component_name; }
+      return sendOrDisconnect(_bridge, { type: 'actor.componentBounds', payload });
     })
   );
 }

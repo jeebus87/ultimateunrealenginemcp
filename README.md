@@ -1,12 +1,12 @@
 # Ultimate Unreal Engine MCP
 
-**132 tools. 26 domains. Full read/write access to Unreal Engine 5.7 — including live editor APIs, Blueprint graphs, and viewport screenshots.**
+**133 tools. 26 domains. Full read/write access to Unreal Engine 5.7 — including live editor APIs, Blueprint graphs, and viewport screenshots.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![UE 5.7](https://img.shields.io/badge/Unreal%20Engine-5.7-orange.svg)](https://www.unrealengine.com/)
 [![Tests](https://img.shields.io/badge/tests-1021%20passing-success.svg)](#development)
-[![Tools](https://img.shields.io/badge/tools-132-informational.svg)](#tool-catalog)
+[![Tools](https://img.shields.io/badge/tools-133-informational.svg)](#tool-catalog)
 
 MCP (Model Context Protocol) is a standard that lets AI assistants call tools on external systems — this server exposes Unreal Engine as those tools.
 
@@ -52,7 +52,7 @@ npx ultimate-unreal-engine-mcp setup --project "C:/MyGame"
 
 This command writes the correct config for your client. The C++ plugin is optional — file-system tools (C++ parsing, code gen, configs, builds, docs) work without it. Install the plugin for live editor tools (Blueprints, actors, viewport, screenshots).
 
-> **Zero optional dependencies.** The C++ plugin compiles on any UE 5.7 install — binary or source. All 129 tools use runtime reflection for optional UE modules (MetaSound, LiveLink, GAS, etc.), so the plugin loads regardless of which plugins your project has enabled. Handlers gracefully report when their target module isn't available.
+> **Zero optional dependencies.** The C++ plugin compiles on any UE 5.7 install — binary or source. All 133 tools use runtime reflection for optional UE modules (MetaSound, LiveLink, GAS, etc.), so the plugin loads regardless of which plugins your project has enabled. Handlers gracefully report when their target module isn't available.
 
 ---
 
@@ -546,7 +546,7 @@ ue_cleanup_screenshots(confirm=true)
 
 ## Automatic Self-Verification
 
-Every mutating tool description includes **mandatory verification guidance** — the AI is instructed to verify its own work before reporting success. This isn't a suggestion; it's baked into the tool interface.
+Verification isn't a suggestion. It's **server-side enforced**. Every mutating tool automatically queries `actor.componentBounds` after the mutation completes and appends the verification data to the response. The AI sees bounds, positions, and component state in the same tool call result, whether it asked for it or not. If something is wrong, the data is right there and impossible to miss.
 
 **Why this matters:** In spatial work (placing doors, aligning meshes, wiring components), a single transform can have cascading effects — rotating a mesh around a pivot shifts its world position, negative scale flips face normals making geometry invisible, collision volumes don't automatically follow mesh offsets. Without verification, the AI reports "done" while the door is floating 2 meters from the wall.
 
@@ -554,24 +554,18 @@ Every mutating tool description includes **mandatory verification guidance** —
 
 ```
 ue_spawn_actor("BP_Door", location={x:1040, y:150, z:0})
-  → Actor spawned
-
-ue_get_component_bounds("BP_Door", component="DoorMesh")     ← automatic
-  → bounds: X=[806, 994] ✓ — in the doorway
+  → {actor_label: "BP_Door", _verification: {bounds: {min: {x:806}, max: {x:994}}}}
+  ← bounds auto-appended by server — in the doorway ✓
 
 ue_set_actor_property("BP_Door", "DoorMesh.RelativeRotation", ...)
-  → Property set
+  → {success: true, _verification: {bounds: {min: {x:1040}, max: {x:1228}}}}
+  ← bounds shifted! rotation moved mesh out of gap ✗
 
-ue_get_component_bounds("BP_Door", component="DoorMesh")     ← automatic
-  → bounds: X=[1040, 1228] ✗ — rotation shifted mesh out of gap
+ue_set_actor_property("BP_Door", "DoorMesh.RelativeLocation", ...)
+  → {success: true, _verification: {bounds: {min: {x:806}, max: {x:994}}}}
+  ← back in place after offset compensation ✓
 
-ue_set_actor_property("BP_Door", "DoorMesh.RelativeLocation", ...)   ← self-correction
-  → Offset compensated
-
-ue_get_component_bounds("BP_Door", component="DoorMesh")     ← re-verify
-  → bounds: X=[806, 994] ✓ — back in place
-
-ue_look_at("BP_Door", angle="front")                          ← visual confirm
+ue_look_at("BP_Door", angle="front")
   → [screenshot inline] door visible, handle correct side ✓
 ```
 
