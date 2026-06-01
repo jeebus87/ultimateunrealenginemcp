@@ -32,7 +32,7 @@ type _UnusedImports =
   | GameplayTagQueryResult;
 
 // Module-level bridge instance — injected in tests via exported handler signatures.
-const bridge = new PluginBridgeClient();
+const bridge = PluginBridgeClient.shared();
 
 // ---------------------------------------------------------------------------
 // sendOrDisconnect helper
@@ -187,7 +187,7 @@ export async function handleQueryGameplayTags(
  *                accept bridge injection via their exported function signatures).
  */
 export function registerGASTools(server: McpServer, _bridge?: PluginBridgeClient): void {
-  const b = _bridge ?? new PluginBridgeClient();
+  const b = _bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_list_abilities (GAS-01)

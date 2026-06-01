@@ -78,7 +78,7 @@ async function sendOrDisconnect(
  * @param bridge  Optional PluginBridgeClient for testing (defaults to a new instance).
  */
 export function registerSelectionTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const _bridge = bridge ?? new PluginBridgeClient();
+  const _bridge = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_select_actors (SEL-01)

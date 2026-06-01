@@ -424,12 +424,17 @@ describe('Mock TCP server — blueprint.subclasses and blueprint.cppUsage comman
 
 describe('handleTraceCppInBlueprints — plugin disconnected', () => {
   it('returns isError:true when plugin is not connected', async () => {
-    const result = await handleTraceCppInBlueprints({ class_name: 'AMyActor', member_name: 'Attack' });
+    // Use a bridge on an unused port that will never connect
+    const disconnectedBridge = new PluginBridgeClient(19999);
+    const result = await handleTraceCppInBlueprints({ class_name: 'AMyActor', member_name: 'Attack' }, disconnectedBridge);
+    disconnectedBridge.destroy();
     expect(result.isError).toBe(true);
   });
 
   it('returns plugin_not_connected error JSON when disconnected', async () => {
-    const result = await handleTraceCppInBlueprints({ class_name: 'AMyActor', member_name: 'Attack' });
+    const disconnectedBridge = new PluginBridgeClient(19999);
+    const result = await handleTraceCppInBlueprints({ class_name: 'AMyActor', member_name: 'Attack' }, disconnectedBridge);
+    disconnectedBridge.destroy();
     const parsed = JSON.parse(result.content[0]!.text);
     expect(parsed.error).toBe('plugin_not_connected');
     expect(parsed.required_plugin).toBe(true);

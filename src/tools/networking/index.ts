@@ -18,7 +18,7 @@ import { withKnownIssues, type ToolResult } from '../known-issues/middleware.js'
 import { PluginBridgeClient, PluginNotConnectedError } from '../../plugin-bridge/client.js';
 
 // Module-level bridge instance — injected in tests via exported function parameter.
-const bridge = new PluginBridgeClient();
+const bridge = PluginBridgeClient.shared();
 
 // ---------------------------------------------------------------------------
 // sendOrDisconnect helper

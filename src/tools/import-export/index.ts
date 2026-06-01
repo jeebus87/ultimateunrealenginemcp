@@ -84,7 +84,7 @@ async function sendOrDisconnect(
  * @param bridge  Optional PluginBridgeClient for testing (injected bridge replaces module singleton).
  */
 export function registerImportExportTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const _bridge = bridge ?? new PluginBridgeClient();
+  const _bridge = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_import_fbx (IMP-01)

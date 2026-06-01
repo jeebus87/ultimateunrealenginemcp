@@ -32,7 +32,7 @@ type _UnusedImports =
   | PhysicsCacheResult;
 
 // Module-level bridge instance — injected in tests via exported handler signatures.
-const _defaultBridge = new PluginBridgeClient();
+const _defaultBridge = PluginBridgeClient.shared();
 
 // ---------------------------------------------------------------------------
 // sendOrDisconnect helper
@@ -184,7 +184,7 @@ export async function handleManagePhysicsCache(
  * @param bridge  Optional PluginBridgeClient for testing (defaults to a new instance).
  */
 export function registerChaosTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const b = bridge ?? new PluginBridgeClient();
+  const b = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_inspect_geometry_collection (CHAOS-01)

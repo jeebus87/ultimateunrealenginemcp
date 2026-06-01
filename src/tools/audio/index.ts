@@ -87,7 +87,7 @@ export async function handleListSoundAssets(
   args: { type_filter?: 'SoundWave' | 'SoundCue' | 'MetaSound' },
   b?: PluginBridgeClient
 ): Promise<ToolResult> {
-  const bridge = b ?? new PluginBridgeClient();
+  const bridge = b ?? PluginBridgeClient.shared();
   // Response data shape: SoundAssetListResult
   const payload: Record<string, unknown> = {};
   if (args.type_filter !== undefined) {
@@ -110,7 +110,7 @@ export async function handleInspectMetasound(
   args: { asset_path: string },
   b?: PluginBridgeClient
 ): Promise<ToolResult> {
-  const bridge = b ?? new PluginBridgeClient();
+  const bridge = b ?? PluginBridgeClient.shared();
   // Response data shape: MetaSoundInspectResult
   return sendOrDisconnect(bridge, {
     type: 'audio.metasound',
@@ -129,7 +129,7 @@ export async function handleInspectSoundCue(
   args: { asset_path: string },
   b?: PluginBridgeClient
 ): Promise<ToolResult> {
-  const bridge = b ?? new PluginBridgeClient();
+  const bridge = b ?? PluginBridgeClient.shared();
   // Response data shape: SoundCueInspectResult
   return sendOrDisconnect(bridge, {
     type: 'audio.soundcue',
@@ -148,7 +148,7 @@ export async function handleQueryAudioInsights(
   args: Record<string, never>,
   b?: PluginBridgeClient
 ): Promise<ToolResult> {
-  const bridge = b ?? new PluginBridgeClient();
+  const bridge = b ?? PluginBridgeClient.shared();
   // Response data shape: AudioInsightsResult
   return sendOrDisconnect(bridge, {
     type: 'audio.insights',
@@ -177,7 +177,7 @@ export async function handleQueryAudioInsights(
  * @param bridge  Optional PluginBridgeClient for testing (injected into handler calls).
  */
 export function registerAudioTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const b = bridge ?? new PluginBridgeClient();
+  const b = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_list_sound_assets (AUD-01)

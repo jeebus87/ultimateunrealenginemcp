@@ -204,7 +204,7 @@ const targetSchema = z.union([
  * @param bridge  Optional PluginBridgeClient for testing (defaults to a new instance).
  */
 export function registerViewportTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const _bridge = bridge ?? new PluginBridgeClient();
+  const _bridge = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_editor_state

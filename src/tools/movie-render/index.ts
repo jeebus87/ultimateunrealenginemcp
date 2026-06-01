@@ -79,7 +79,7 @@ async function sendOrDisconnect(
  * @param bridge  Optional PluginBridgeClient for testing (defaults to a new instance).
  */
 export function registerMovieRenderTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const _bridge = bridge ?? new PluginBridgeClient();
+  const _bridge = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_list_render_queue (MRP-01)

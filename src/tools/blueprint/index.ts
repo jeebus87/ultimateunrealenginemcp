@@ -23,7 +23,7 @@ import type {
 
 // Module-level bridge instance — Phase 7 will introduce a shared singleton.
 // Two instances (blueprint + editor) is acceptable for Phase 1 stub behaviour.
-const bridge = new PluginBridgeClient();
+const bridge = PluginBridgeClient.shared();
 
 // ---------------------------------------------------------------------------
 // Exported handler functions (for direct unit testing)
@@ -362,9 +362,9 @@ export async function handleFindBlueprintSubclasses(args: { class_name: string }
  * call or access a specific C++ member via the UE Editor plugin bridge.
  * BPC-03: requires plugin; returns plugin_not_connected when editor is not running.
  */
-export async function handleTraceCppInBlueprints(args: { class_name: string; member_name: string }): Promise<ToolResult> {
+export async function handleTraceCppInBlueprints(args: { class_name: string; member_name: string }, b: PluginBridgeClient = bridge): Promise<ToolResult> {
   try {
-    const response = await bridge.sendCommand({
+    const response = await b.sendCommand({
       type: 'blueprint.cppUsage',
       correlationId: '',
       payload: { class_name: args.class_name, member_name: args.member_name },

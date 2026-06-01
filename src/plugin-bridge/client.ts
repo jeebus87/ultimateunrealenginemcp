@@ -81,6 +81,17 @@ export class PluginBridgeClient {
     reject:  (e: Error) => void;
   }>();
 
+  /** Shared singleton instance — all tool modules use the same TCP connection. */
+  private static _instance: PluginBridgeClient | null = null;
+
+  /** Get the shared singleton bridge client. Creates one on first call. */
+  static shared(): PluginBridgeClient {
+    if (!PluginBridgeClient._instance) {
+      PluginBridgeClient._instance = new PluginBridgeClient();
+    }
+    return PluginBridgeClient._instance;
+  }
+
   constructor(port: number = PLUGIN_PORT) {
     this.port = port;
     this.backoff = new ExponentialBackoff();
@@ -131,13 +142,13 @@ export class PluginBridgeClient {
     return new Promise<MCPResponse>((resolve, reject) => {
       this.pendingCommands.set(correlationId, { resolve, reject });
 
-      // 10-second timeout — T-07-11 mitigation
+      // 30-second timeout — T-07-11 mitigation
       const timeoutHandle = setTimeout(() => {
         if (this.pendingCommands.has(correlationId)) {
           this.pendingCommands.delete(correlationId);
-          reject(new Error(`MCP command '${cmd.type}' timed out after 10 seconds`));
+          reject(new Error(`MCP command '${cmd.type}' timed out after 30 seconds`));
         }
-      }, 10_000);
+      }, 30_000);
 
       // Write JSON-newline framed message to the socket.
       // The write callback fires on flush; reject immediately on error.

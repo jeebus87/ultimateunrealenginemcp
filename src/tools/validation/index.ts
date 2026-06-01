@@ -20,7 +20,7 @@ import type {
 type _UnusedImports = ValidationAssetResult | ValidationFolderResult | ValidationProjectResult | BlueprintCompileResult;
 
 // Module-level bridge instance — injected in tests via exported handler signatures.
-const bridge = new PluginBridgeClient();
+const bridge = PluginBridgeClient.shared();
 
 // ---------------------------------------------------------------------------
 // sendOrDisconnect helper
@@ -156,7 +156,7 @@ export async function handleCheckBlueprint(
  * @param bridge  Optional PluginBridgeClient for testing (defaults to a new instance).
  */
 export function registerValidationTools(server: McpServer, bridge?: PluginBridgeClient): void {
-  const _bridge = bridge ?? new PluginBridgeClient();
+  const _bridge = bridge ?? PluginBridgeClient.shared();
 
   // --------------------------------------------------------------------------
   // ue_validate_asset (VAL-01)
