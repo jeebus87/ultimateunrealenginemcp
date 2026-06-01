@@ -1,10 +1,6 @@
 // MCPBridgeSubsystem.cpp
 // Wires FMCPCommandRouter and FMCPTcpServer into the editor subsystem lifecycle.
-//
-// Core handlers are always registered. Optional-plugin handlers are guarded by
-// preprocessor defines set in Build.cs. When a plugin module is not linked,
-// the corresponding Register*Commands() call is skipped and the TypeScript
-// side returns "plugin_not_connected" gracefully.
+// All handlers use UE reflection for optional plugin access — no optional module linking required.
 
 #include "MCPBridgeSubsystem.h"
 #include "MCPBlueprintHandlers.h"
@@ -18,21 +14,20 @@
 #include "MCPSequencerCommands.h"
 #include "MCPSelectionCommands.h"
 #include "MCPCollisionPhysicsCommands.h"
+#include "MCPValidationCommands.h"
+#include "MCPMaterialCommands.h"
+#include "MCPWorldPartitionCommands.h"
+#include "MCPImportExportCommands.h"
+#include "MCPAudioCommands.h"
+#include "MCPGASCommands.h"
+#include "MCPChaosCommands.h"
+#include "MCPLiveLinkCommands.h"
+#include "MCPMotionDesignCommands.h"
+#include "MCPMovieRenderCommands.h"
+#include "MCPNetworkingCommands.h"
+#include "MCPAnimationCommands.h"
+#include "MCPAICommands.h"
 #include "Misc/ConfigCacheIni.h"
-
-// Optional module handlers — only included when their Build.cs dependencies are linked.
-// To enable: add the module to Build.cs PrivateDependencyModuleNames and uncomment here.
-// #include "MCPValidationCommands.h"    // Requires: DataValidation
-// #include "MCPMaterialCommands.h"      // Requires: MaterialEditor
-// #include "MCPWorldPartitionCommands.h" // Requires: WorldPartitionEditor, DataLayerEditor
-// #include "MCPImportExportCommands.h"  // Requires: InterchangeEngine, InterchangeCore, InterchangePipelines
-// #include "MCPAudioCommands.h"         // Requires: MetasoundEngine, MetasoundFrontend
-// #include "MCPGASCommands.h"           // Requires: GameplayAbilities
-// #include "MCPChaosCommands.h"         // Requires: GeometryCollectionEngine, Chaos, ChaosCloth
-// #include "MCPLiveLinkCommands.h"      // Requires: LiveLinkInterface, LiveLink
-// #include "MCPMotionDesignCommands.h"  // Requires: AvalancheTransition, RemoteControl
-// #include "MCPMovieRenderCommands.h"   // Requires: MovieRenderPipelineCore, MovieRenderPipelineEditor
-// #include "MCPNetworkingCommands.h"    // Requires: OnlineSubsystem, OnlineSubsystemUtils
 
 void UMCPBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -42,7 +37,7 @@ void UMCPBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	Router = MakeUnique<FMCPCommandRouter>();
 
-	// --- Core handlers (always available) ---
+	// Core handlers
 	RegisterBlueprintHandlers(*Router);
 	RegisterBlueprintBridgeHandlers(*Router);
 	RegisterActorCommands(*Router);
@@ -56,18 +51,20 @@ void UMCPBridgeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	RegisterSelectionCommands(*Router);
 	RegisterCollisionPhysicsCommands(*Router);
 
-	// --- Optional handlers (uncomment when plugin dependencies are enabled) ---
-	// RegisterValidationCommands(*Router);
-	// RegisterMaterialCommands(*Router);
-	// RegisterWorldPartitionCommands(*Router);
-	// RegisterImportExportCommands(*Router);
-	// RegisterAudioCommands(*Router);
-	// RegisterGASCommands(*Router);
-	// RegisterChaosCommands(*Router);
-	// RegisterLiveLinkCommands(*Router);
-	// RegisterMotionDesignCommands(*Router);
-	// RegisterMovieRenderCommands(*Router);
-	// RegisterNetworkingCommands(*Router);
+	// Reflection-based handlers (use FModuleManager runtime checks internally)
+	RegisterValidationCommands(*Router);
+	RegisterMaterialCommands(*Router);
+	RegisterWorldPartitionCommands(*Router);
+	RegisterImportExportCommands(*Router);
+	RegisterAudioCommands(*Router);
+	RegisterGASCommands(*Router);
+	RegisterChaosCommands(*Router);
+	RegisterLiveLinkCommands(*Router);
+	RegisterMotionDesignCommands(*Router);
+	RegisterMovieRenderCommands(*Router);
+	RegisterNetworkingCommands(*Router);
+	RegisterAnimationCommands(*Router);
+	RegisterAICommands(*Router);
 
 	// Create and start the TCP server.
 	TcpServer = MakeUnique<FMCPTcpServer>(*Router);
