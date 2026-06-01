@@ -201,11 +201,24 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 		const FVector   Location(X, Y, Z);
 		const FRotator  Rotation(0.0, 0.0, 0.0);
 
+		// Optional label — sets the editor display name after spawn.
+		FString Label;
+		if (Payload->TryGetStringField(TEXT("label"), Label) && !Label.IsEmpty())
+		{
+			Params.Name = FName(*Label);
+		}
+
 		AActor* Spawned = World->SpawnActor<AActor>(ActorClass, Location, Rotation, Params);
 		if (!Spawned)
 		{
 			SendResponse(BuildActorErrorResponse(CorrId, TEXT("spawn_failed")) + TEXT("\n"));
 			return;
+		}
+
+		// Apply explicit label if provided (overrides auto-generated label).
+		if (!Label.IsEmpty())
+		{
+			Spawned->SetActorLabel(Label);
 		}
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();

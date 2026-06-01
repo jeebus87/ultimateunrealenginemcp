@@ -111,6 +111,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
           y: z.number().describe('Y coordinate in Unreal units (cm)'),
           z: z.number().describe('Z coordinate in Unreal units (cm)'),
         }).describe('World-space location to spawn the actor at'),
+        label: z.string().optional().describe('Optional editor display label for the spawned actor'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -118,9 +119,11 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
       },
     },
     withKnownIssues('ue_spawn_actor', async (args) => {
+      const payload: Record<string, unknown> = { class_name: args.class_name, location: args.location };
+      if (args.label) { payload['label'] = args.label; }
       return sendOrDisconnect(_bridge, {
         type: 'actor.spawn',
-        payload: { class_name: args.class_name, location: args.location },
+        payload,
       });
     })
   );
