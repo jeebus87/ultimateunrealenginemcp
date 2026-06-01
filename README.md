@@ -1,12 +1,12 @@
 # Ultimate Unreal Engine MCP
 
-**129 tools. 26 domains. Full read/write access to Unreal Engine 5.7 — including live editor APIs, Blueprint graphs, and viewport screenshots.**
+**132 tools. 26 domains. Full read/write access to Unreal Engine 5.7 — including live editor APIs, Blueprint graphs, and viewport screenshots.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node 22+](https://img.shields.io/badge/Node.js-22%2B-brightgreen.svg)](https://nodejs.org/)
 [![UE 5.7](https://img.shields.io/badge/Unreal%20Engine-5.7-orange.svg)](https://www.unrealengine.com/)
 [![Tests](https://img.shields.io/badge/tests-1021%20passing-success.svg)](#development)
-[![Tools](https://img.shields.io/badge/tools-129-informational.svg)](#tool-catalog)
+[![Tools](https://img.shields.io/badge/tools-132-informational.svg)](#tool-catalog)
 
 MCP (Model Context Protocol) is a standard that lets AI assistants call tools on external systems — this server exposes Unreal Engine as those tools.
 
@@ -296,14 +296,17 @@ graph TD
 </details>
 
 <details>
-<summary><strong>Editor</strong> — 7 tools</summary>
+<summary><strong>Editor</strong> — 10 tools</summary>
 
 | Tool | Description |
 |------|-------------|
 | `ue_list_actors` | List actors in the current level with transforms and class info |
-| `ue_spawn_actor` | Spawn an actor by class into the current level |
+| `ue_spawn_actor` | Spawn an actor by class with optional label |
 | `ue_transform_actor` | Move, rotate, scale, or set properties on an actor |
 | `ue_delete_actor` | Delete an actor from the current level |
+| `ue_set_actor_property` | Set any UPROPERTY on an actor or component by label (bool, int, float, string, name, actor ref, asset ref) |
+| `ue_create_data_asset` | Create a UPrimaryDataAsset with reflection-set properties |
+| `ue_create_curve` | Create a UCurveFloat asset with keyframes |
 | `ue_query_assets` | Query the asset registry — search by class, path, or name |
 | `ue_trace_references` | Trace all assets that reference or are referenced by an asset |
 | `ue_read_level_layout` | Read the current level's actor graph and spatial layout |
