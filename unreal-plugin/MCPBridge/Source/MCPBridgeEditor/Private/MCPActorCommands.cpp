@@ -478,8 +478,35 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Find the UPROPERTY by name on the actor's class.
-		FProperty* Prop = TargetActor->GetClass()->FindPropertyByName(FName(*PropertyName));
+		// Optional component_name — if set, resolve property on the named component
+		// instead of the actor itself.  Enables "DoorMesh" + "StaticMesh" patterns.
+		UObject* PropertyOwner = TargetActor;
+		FString ComponentName;
+		if (Payload->TryGetStringField(TEXT("component_name"), ComponentName) && !ComponentName.IsEmpty())
+		{
+			UActorComponent* Comp = TargetActor->FindComponentByClass<UActorComponent>();
+			// Search all components by their subobject name.
+			TInlineComponentArray<UActorComponent*> Components;
+			TargetActor->GetComponents(Components);
+			UActorComponent* FoundComp = nullptr;
+			for (UActorComponent* C : Components)
+			{
+				if (C && C->GetName() == ComponentName)
+				{
+					FoundComp = C;
+					break;
+				}
+			}
+			if (!FoundComp)
+			{
+				SendResponse(BuildActorErrorResponse(CorrId, TEXT("component_not_found")) + TEXT("\n"));
+				return;
+			}
+			PropertyOwner = FoundComp;
+		}
+
+		// Find the UPROPERTY by name on the target object's class.
+		FProperty* Prop = PropertyOwner->GetClass()->FindPropertyByName(FName(*PropertyName));
 		if (!Prop)
 		{
 			SendResponse(BuildActorErrorResponse(CorrId, TEXT("property_not_found")) + TEXT("\n"));
@@ -487,7 +514,7 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 		}
 
 		TargetActor->Modify();
-		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(TargetActor);
+		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(PropertyOwner);
 
 		if (ValueType == TEXT("bool"))
 		{
