@@ -348,7 +348,25 @@ void RegisterAssetCommands(FMCPCommandRouter& Router)
 			return;
 		}
 
-		// Create package and the object inside it.
+		// Check if the asset already exists (e.g. from a previous session that saved to disk).
+		UObject* Existing = StaticFindObject(AssetClass, nullptr, *AssetPath);
+		if (!Existing)
+		{
+			// Also check disk — LoadObject will find .uasset files from a prior save.
+			Existing = LoadObject<UObject>(nullptr, *AssetPath);
+		}
+		if (Existing)
+		{
+			// Asset already exists — return success with existing path.
+			TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+			Data->SetStringField(TEXT("path"), AssetPath);
+			Data->SetStringField(TEXT("class"), ClassName);
+			Data->SetBoolField(TEXT("created"), false);
+			Data->SetBoolField(TEXT("already_exists"), true);
+			SendResponse(BuildSuccessResponse(CorrId, Data));
+			return;
+		}
+
 		UPackage* Package = CreatePackage(*AssetPath);
 		if (!Package)
 		{
@@ -419,21 +437,26 @@ void RegisterAssetCommands(FMCPCommandRouter& Router)
 			}
 		}
 
-		// Notify asset registry and save.
+		// Notify asset registry.
 		FAssetRegistryModule::AssetCreated(NewAsset);
 		NewAsset->MarkPackageDirty();
 		Package->SetDirtyFlag(true);
 
-		// Auto-save so the asset persists.
+		// Save to disk — ensure parent directory exists first.
+		bool bSaved = false;
 		FString FilePath = FPackageName::LongPackageNameToFilename(AssetPath, FPackageName::GetAssetPackageExtension());
+		FString FileDir = FPaths::GetPath(FilePath);
+		IFileManager::Get().MakeDirectory(*FileDir, true);
+
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-		UPackage::SavePackage(Package, NewAsset, *FilePath, SaveArgs);
+		bSaved = UPackage::SavePackage(Package, NewAsset, *FilePath, SaveArgs);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("path"), AssetPath);
 		Data->SetStringField(TEXT("class"), ClassName);
 		Data->SetBoolField(TEXT("created"), true);
+		Data->SetBoolField(TEXT("saved_to_disk"), bSaved);
 
 		SendResponse(BuildSuccessResponse(CorrId, Data));
 	});
@@ -471,6 +494,22 @@ void RegisterAssetCommands(FMCPCommandRouter& Router)
 		// Split path.
 		FString PackagePath, AssetName;
 		AssetPath.Split(TEXT("/"), &PackagePath, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+
+		// Check if the curve already exists.
+		UObject* Existing = StaticFindObject(UCurveFloat::StaticClass(), nullptr, *AssetPath);
+		if (!Existing)
+		{
+			Existing = LoadObject<UCurveFloat>(nullptr, *AssetPath);
+		}
+		if (Existing)
+		{
+			TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+			Data->SetStringField(TEXT("path"), AssetPath);
+			Data->SetBoolField(TEXT("created"), false);
+			Data->SetBoolField(TEXT("already_exists"), true);
+			SendResponse(BuildSuccessResponse(CorrId, Data));
+			return;
+		}
 
 		UPackage* Package = CreatePackage(*AssetPath);
 		if (!Package)
@@ -522,10 +561,15 @@ void RegisterAssetCommands(FMCPCommandRouter& Router)
 		Curve->MarkPackageDirty();
 		Package->SetDirtyFlag(true);
 
+		// Save to disk.
+		bool bSaved = false;
 		FString FilePath = FPackageName::LongPackageNameToFilename(AssetPath, FPackageName::GetAssetPackageExtension());
+		FString FileDir = FPaths::GetPath(FilePath);
+		IFileManager::Get().MakeDirectory(*FileDir, true);
+
 		FSavePackageArgs SaveArgs;
 		SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-		UPackage::SavePackage(Package, Curve, *FilePath, SaveArgs);
+		bSaved = UPackage::SavePackage(Package, Curve, *FilePath, SaveArgs);
 
 		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
 		Data->SetStringField(TEXT("path"), AssetPath);
