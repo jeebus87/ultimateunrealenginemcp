@@ -27,6 +27,7 @@ public class MCPBridgeEditor : ModuleRules
             // Core engine (always present)
             "CoreUObject",
             "Engine",
+            "RenderCore",
             "UnrealEd",
             "EditorSubsystem",
             "Json",

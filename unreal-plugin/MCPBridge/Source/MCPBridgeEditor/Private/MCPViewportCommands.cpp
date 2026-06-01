@@ -33,6 +33,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
 #include "ImageUtils.h"
+#include "RenderingThread.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "EngineUtils.h"
@@ -217,6 +218,7 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 	// then Draw executes the render pipeline synchronously.
 	ViewportClient->Viewport->Invalidate();
 	ViewportClient->Viewport->Draw();
+	FlushRenderingCommands();
 
 	// Read pixels from the viewport framebuffer.
 	TArray<FColor> Pixels;
