@@ -142,6 +142,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
         property_name: z.string().describe('The UPROPERTY name to set (e.g., RoomID, RoomDoor, DoorCurve)'),
         value: z.union([z.string(), z.number(), z.boolean()]).describe('The value to set — string for name/text/actor label/asset path, number for int/float, boolean for bool'),
         value_type: z.enum(['bool', 'int', 'float', 'string', 'name', 'text', 'actor', 'asset']).describe('Type of the value'),
+        component_name: z.string().optional().describe('Optional subcomponent name (e.g. DoorMesh) to set the property on instead of the actor'),
       }),
       annotations: {
         readOnlyHint: false,
@@ -149,14 +150,16 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
       },
     },
     withKnownIssues('ue_set_actor_property', async (args) => {
+      const payload: Record<string, unknown> = {
+        actor_label: args.actor_label,
+        property_name: args.property_name,
+        value: args.value,
+        value_type: args.value_type,
+      };
+      if (args.component_name) { payload['component_name'] = args.component_name; }
       return sendOrDisconnect(_bridge, {
         type: 'actor.setProperty',
-        payload: {
-          actor_label: args.actor_label,
-          property_name: args.property_name,
-          value: args.value,
-          value_type: args.value_type,
-        },
+        payload,
       });
     })
   );
