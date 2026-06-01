@@ -125,10 +125,8 @@ function configureClient(client: string, port: number, projectRoot: string): voi
     args: ['-y', 'ultimate-unreal-engine-mcp'],
   };
 
-  // Claude Code requires "type": "stdio" in each entry
-  if (client === 'claude-code') {
-    serverEntry['type'] = 'stdio';
-  }
+  // All clients need "type": "stdio" for proper MCP server detection
+  serverEntry['type'] = 'stdio';
 
   // Only add env if project root is specified or port is non-default
   const envBlock: Record<string, string> = {};
