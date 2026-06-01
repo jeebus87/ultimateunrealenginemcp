@@ -616,6 +616,42 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 				ObjProp->SetObjectPropertyValue(ValuePtr, Asset);
 			}
 		}
+		else if (ValueType == TEXT("vector"))
+		{
+			// Parse {x, y, z} JSON object for FVector properties (e.g. RelativeLocation).
+			const TSharedPtr<FJsonObject>* VecObj;
+			if (Payload->TryGetObjectField(TEXT("value"), VecObj))
+			{
+				double X = 0.0, Y = 0.0, Z = 0.0;
+				(*VecObj)->TryGetNumberField(TEXT("x"), X);
+				(*VecObj)->TryGetNumberField(TEXT("y"), Y);
+				(*VecObj)->TryGetNumberField(TEXT("z"), Z);
+
+				FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+				if (StructProp && StructProp->Struct == TBaseStructure<FVector>::Get())
+				{
+					*reinterpret_cast<FVector*>(ValuePtr) = FVector(X, Y, Z);
+				}
+			}
+		}
+		else if (ValueType == TEXT("rotator"))
+		{
+			// Parse {pitch, yaw, roll} JSON object for FRotator properties (e.g. RelativeRotation).
+			const TSharedPtr<FJsonObject>* RotObj;
+			if (Payload->TryGetObjectField(TEXT("value"), RotObj))
+			{
+				double Pitch = 0.0, Yaw = 0.0, Roll = 0.0;
+				(*RotObj)->TryGetNumberField(TEXT("pitch"), Pitch);
+				(*RotObj)->TryGetNumberField(TEXT("yaw"), Yaw);
+				(*RotObj)->TryGetNumberField(TEXT("roll"), Roll);
+
+				FStructProperty* StructProp = CastField<FStructProperty>(Prop);
+				if (StructProp && StructProp->Struct == TBaseStructure<FRotator>::Get())
+				{
+					*reinterpret_cast<FRotator*>(ValuePtr) = FRotator(Pitch, Yaw, Roll);
+				}
+			}
+		}
 		else
 		{
 			SendResponse(BuildActorErrorResponse(CorrId, TEXT("unsupported_value_type")) + TEXT("\n"));
