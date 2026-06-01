@@ -49,7 +49,9 @@ npx ultimate-unreal-engine-mcp setup --client cursor
 npx ultimate-unreal-engine-mcp setup --project "C:/MyGame"
 ```
 
-This command writes the correct config for your client. The C++ plugin is optional — file system and code generation tools work without it.
+This command writes the correct config for your client. The C++ plugin is optional — file-system tools (C++ parsing, code gen, configs, builds, docs) work without it. Install the plugin for live editor tools (Blueprints, actors, viewport, screenshots).
+
+> **Zero optional dependencies.** The C++ plugin compiles on any UE 5.7 install — binary or source. All 129 tools use runtime reflection for optional UE modules (MetaSound, LiveLink, GAS, etc.), so the plugin loads regardless of which plugins your project has enabled. Handlers gracefully report when their target module isn't available.
 
 ---
 
@@ -556,6 +558,8 @@ Some tools work without the UE Editor running. Others require the MCPBridge plug
 | Check deprecation status | GAS, PCG, Physics, Networking |
 
 The TypeScript server starts in headless mode by default. Tools that require the plugin return a structured `plugin_not_connected` error with a clear message — they never silently fail.
+
+When the plugin IS running but an optional UE module isn't enabled (e.g., MetaSound, LiveLink, GAS), the handler returns `module_not_available` with the module name — no crash, no missing DLL errors. Enable the plugin in your project settings and the handler starts working automatically.
 
 ---
 
