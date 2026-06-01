@@ -236,9 +236,15 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 		Payload->TryGetBoolField(TEXT("combine_meshes"), bCombineMeshes);
 		Payload->TryGetNumberField(TEXT("scale_factor"), ScaleFactor);
 
-		// Capture everything for async dispatch.
-		AsyncTask(ENamedThreads::GameThread, [CorrId, SendResponse, SourceFile, DestPath,
-			bImportMaterials, bCombineMeshes, ScaleFactor]()
+		// Defer the import to the next engine tick via FTSTicker.
+		// Reason: ImportAssetTasks triggers the Interchange pipeline which
+		// enqueues task-graph work.  Running it inside the router's
+		// AsyncTask(GameThread) hits the recursion guard (Assertion
+		// ++Queue.RecursionGuard == 1).  A ticker callback runs on the
+		// game thread but OUTSIDE the task-graph scope.
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([CorrId, SendResponse, SourceFile, DestPath,
+				bImportMaterials, bCombineMeshes, ScaleFactor](float) -> bool
 		{
 			// Split dest_path into package path + asset name.
 			FString PackagePath = DestPath;
@@ -307,7 +313,8 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 			Data->SetNumberField(TEXT("count"), static_cast<double>(AssetsArray.Num()));
 
 			SendResponse(BuildImpSuccessResponse(CorrId, Data) + TEXT("\n"));
-		});
+			return false; // One-shot: remove ticker after execution
+		}), 0.0f);
 	});
 
 	// -----------------------------------------------------------------------
@@ -753,7 +760,9 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 		Payload->TryGetBoolField(TEXT("import_materials"), bImportMaterials);
 		Payload->TryGetNumberField(TEXT("scale_factor"), ScaleFactor);
 
-		AsyncTask(ENamedThreads::GameThread, [CorrId, SendResponse, Directory, DestPath, Extensions, bImportMaterials, ScaleFactor]()
+		// Defer to next tick to avoid Interchange task-graph recursion (same as import.fbx fix).
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([CorrId, SendResponse, Directory, DestPath, Extensions, bImportMaterials, ScaleFactor](float) -> bool
 		{
 			// Enumerate all matching files in the directory.
 			TArray<FString> FoundFiles;
@@ -843,6 +852,7 @@ void RegisterImportExportCommands(FMCPCommandRouter& Router)
 			Data->SetArrayField(TEXT("errors"), ErrorsArray);
 
 			SendResponse(BuildImpSuccessResponse(CorrId, Data) + TEXT("\n"));
-		});
+			return false; // One-shot: remove ticker after execution
+		}), 0.0f);
 	});
 }
