@@ -129,6 +129,98 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
   );
 
   // --------------------------------------------------------------------------
+  // ue_set_actor_property
+  // --------------------------------------------------------------------------
+  server.registerTool(
+    'ue_set_actor_property',
+    {
+      title: 'Set Actor Property',
+      description:
+        '[requires_plugin] Set a UPROPERTY value on an actor by label. Supports bool, int, float, string, name, text, actor (reference by label), and asset (reference by path).',
+      inputSchema: z.object({
+        actor_label: z.string().describe('The editor label of the target actor'),
+        property_name: z.string().describe('The UPROPERTY name to set (e.g., RoomID, RoomDoor, DoorCurve)'),
+        value: z.union([z.string(), z.number(), z.boolean()]).describe('The value to set — string for name/text/actor label/asset path, number for int/float, boolean for bool'),
+        value_type: z.enum(['bool', 'int', 'float', 'string', 'name', 'text', 'actor', 'asset']).describe('Type of the value'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+      },
+    },
+    withKnownIssues('ue_set_actor_property', async (args) => {
+      return sendOrDisconnect(_bridge, {
+        type: 'actor.setProperty',
+        payload: {
+          actor_label: args.actor_label,
+          property_name: args.property_name,
+          value: args.value,
+          value_type: args.value_type,
+        },
+      });
+    })
+  );
+
+  // --------------------------------------------------------------------------
+  // ue_create_data_asset
+  // --------------------------------------------------------------------------
+  server.registerTool(
+    'ue_create_data_asset',
+    {
+      title: 'Create Data Asset',
+      description:
+        '[requires_plugin] Create a UPrimaryDataAsset (or subclass) at the given path with reflection-set properties.',
+      inputSchema: z.object({
+        asset_path: z.string().describe('UE asset path, e.g. /Game/Data/DA_ValveHandle'),
+        class_name: z.string().describe('Asset class name, e.g. ItemDefinition'),
+        properties: z.record(z.object({
+          value: z.union([z.string(), z.number(), z.boolean()]).describe('Property value'),
+          type: z.enum(['name', 'text', 'int', 'byte', 'string']).describe('Property type for reflection'),
+        })).optional().describe('Map of property_name → {value, type} to set after creation'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+      },
+    },
+    withKnownIssues('ue_create_data_asset', async (args) => {
+      const payload: Record<string, unknown> = { asset_path: args.asset_path, class_name: args.class_name };
+      if (args.properties) { payload['properties'] = args.properties; }
+      return sendOrDisconnect(_bridge, { type: 'asset.createDataAsset', payload });
+    })
+  );
+
+  // --------------------------------------------------------------------------
+  // ue_create_curve
+  // --------------------------------------------------------------------------
+  server.registerTool(
+    'ue_create_curve',
+    {
+      title: 'Create Float Curve',
+      description:
+        '[requires_plugin] Create a UCurveFloat asset with keyframes at the given path.',
+      inputSchema: z.object({
+        asset_path: z.string().describe('UE asset path, e.g. /Game/Curves/C_DoorSwing'),
+        keys: z.array(z.object({
+          time: z.number().describe('Key time in seconds'),
+          value: z.number().describe('Key value'),
+          interp: z.enum(['linear', 'cubic', 'constant']).optional().describe('Interpolation mode (default: cubic)'),
+        })).describe('Array of keyframes'),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+      },
+    },
+    withKnownIssues('ue_create_curve', async (args) => {
+      return sendOrDisconnect(_bridge, {
+        type: 'asset.createCurve',
+        payload: { asset_path: args.asset_path, keys: args.keys },
+      });
+    })
+  );
+
+  // --------------------------------------------------------------------------
   // ue_transform_actor  (Phase 9 — adds scale field; renamed from Phase 1 stub)
   // --------------------------------------------------------------------------
   server.registerTool(

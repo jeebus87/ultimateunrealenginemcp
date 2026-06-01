@@ -421,12 +421,12 @@ describe('editor tools', () => {
   // Structural checks
   // -------------------------------------------------------------------------
   describe('tool registration', () => {
-    it('registers exactly seven tools', () => {
+    it('registers exactly ten tools', () => {
       const mockBridge = makeMockBridge({});
       const { server, handlers } = makeStubServer();
       registerEditorTools(server, mockBridge);
 
-      expect(handlers.size).toBe(7);
+      expect(handlers.size).toBe(10);
     });
 
     it('registers all expected tool names', () => {

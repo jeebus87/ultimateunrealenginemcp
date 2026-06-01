@@ -425,4 +425,187 @@ void RegisterActorCommands(FMCPCommandRouter& Router)
 
 		SendResponse(BuildActorSuccessResponse(CorrId, Data) + TEXT("\n"));
 	});
+
+	// -----------------------------------------------------------------------
+	// actor.setProperty
+	// Sets a UPROPERTY on an actor by label.  Supports:
+	//   - Primitive types: bool, int, float, FString, FName, FText
+	//   - Actor references: resolved by actor label in the current world
+	//   - Asset references: resolved by UE asset path (e.g. /Game/Data/DA_Key)
+	// Payload: { actor_label, property_name, value, value_type }
+	// value_type: "bool"|"int"|"float"|"string"|"name"|"text"|"actor"|"asset"
+	// -----------------------------------------------------------------------
+	Router.RegisterHandler(TEXT("actor.setProperty"), [](TSharedPtr<FJsonObject> Cmd, FMCPResponseSender SendResponse)
+	{
+		const FString CorrId = Cmd->GetStringField(TEXT("correlationId"));
+
+		TSharedPtr<FJsonObject> Payload;
+		const TSharedPtr<FJsonValue>* PayloadVal = Cmd->Values.Find(TEXT("payload"));
+		if (PayloadVal && (*PayloadVal)->Type == EJson::Object)
+		{
+			Payload = (*PayloadVal)->AsObject();
+		}
+
+		FString ActorLabel, PropertyName, ValueType;
+		if (!Payload.IsValid()
+			|| !Payload->TryGetStringField(TEXT("actor_label"), ActorLabel)  || ActorLabel.IsEmpty()
+			|| !Payload->TryGetStringField(TEXT("property_name"), PropertyName) || PropertyName.IsEmpty()
+			|| !Payload->TryGetStringField(TEXT("value_type"), ValueType) || ValueType.IsEmpty())
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("missing_required_fields")) + TEXT("\n"));
+			return;
+		}
+
+		UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (!World)
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("no_world_open")) + TEXT("\n"));
+			return;
+		}
+
+		// Find target actor by label.
+		AActor* TargetActor = nullptr;
+		for (TActorIterator<AActor> It(World); It; ++It)
+		{
+			if ((*It)->GetActorLabel() == ActorLabel)
+			{
+				TargetActor = *It;
+				break;
+			}
+		}
+		if (!TargetActor)
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("actor_not_found")) + TEXT("\n"));
+			return;
+		}
+
+		// Find the UPROPERTY by name on the actor's class.
+		FProperty* Prop = TargetActor->GetClass()->FindPropertyByName(FName(*PropertyName));
+		if (!Prop)
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("property_not_found")) + TEXT("\n"));
+			return;
+		}
+
+		TargetActor->Modify();
+		void* ValuePtr = Prop->ContainerPtrToValuePtr<void>(TargetActor);
+
+		if (ValueType == TEXT("bool"))
+		{
+			bool bVal = false;
+			Payload->TryGetBoolField(TEXT("value"), bVal);
+			if (FBoolProperty* BoolProp = CastField<FBoolProperty>(Prop))
+			{
+				BoolProp->SetPropertyValue(ValuePtr, bVal);
+			}
+		}
+		else if (ValueType == TEXT("int"))
+		{
+			int32 IntVal = 0;
+			Payload->TryGetNumberField(TEXT("value"), *(double*)&IntVal);
+			double Dbl = 0;
+			Payload->TryGetNumberField(TEXT("value"), Dbl);
+			IntVal = static_cast<int32>(Dbl);
+			if (FIntProperty* IntProp = CastField<FIntProperty>(Prop))
+			{
+				IntProp->SetPropertyValue(ValuePtr, IntVal);
+			}
+		}
+		else if (ValueType == TEXT("float"))
+		{
+			double Dbl = 0.0;
+			Payload->TryGetNumberField(TEXT("value"), Dbl);
+			if (FFloatProperty* FloatProp = CastField<FFloatProperty>(Prop))
+			{
+				FloatProp->SetPropertyValue(ValuePtr, static_cast<float>(Dbl));
+			}
+			else if (FDoubleProperty* DoubleProp = CastField<FDoubleProperty>(Prop))
+			{
+				DoubleProp->SetPropertyValue(ValuePtr, Dbl);
+			}
+		}
+		else if (ValueType == TEXT("string"))
+		{
+			FString StrVal;
+			Payload->TryGetStringField(TEXT("value"), StrVal);
+			if (FStrProperty* StrProp = CastField<FStrProperty>(Prop))
+			{
+				StrProp->SetPropertyValue(ValuePtr, StrVal);
+			}
+		}
+		else if (ValueType == TEXT("name"))
+		{
+			FString StrVal;
+			Payload->TryGetStringField(TEXT("value"), StrVal);
+			if (FNameProperty* NameProp = CastField<FNameProperty>(Prop))
+			{
+				NameProp->SetPropertyValue(ValuePtr, FName(*StrVal));
+			}
+		}
+		else if (ValueType == TEXT("text"))
+		{
+			FString StrVal;
+			Payload->TryGetStringField(TEXT("value"), StrVal);
+			if (FTextProperty* TextProp = CastField<FTextProperty>(Prop))
+			{
+				TextProp->SetPropertyValue(ValuePtr, FText::FromString(StrVal));
+			}
+		}
+		else if (ValueType == TEXT("actor"))
+		{
+			// value is the label of another actor in the world.
+			FString RefLabel;
+			Payload->TryGetStringField(TEXT("value"), RefLabel);
+			AActor* RefActor = nullptr;
+			for (TActorIterator<AActor> It(World); It; ++It)
+			{
+				if ((*It)->GetActorLabel() == RefLabel)
+				{
+					RefActor = *It;
+					break;
+				}
+			}
+			FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop);
+			if (ObjProp)
+			{
+				ObjProp->SetObjectPropertyValue(ValuePtr, RefActor);
+			}
+		}
+		else if (ValueType == TEXT("asset"))
+		{
+			// value is an asset path, e.g. /Game/Data/DA_ValveHandle
+			FString AssetPath;
+			Payload->TryGetStringField(TEXT("value"), AssetPath);
+			UObject* Asset = LoadObject<UObject>(nullptr, *AssetPath);
+			if (!Asset)
+			{
+				SendResponse(BuildActorErrorResponse(CorrId, TEXT("asset_not_found")) + TEXT("\n"));
+				return;
+			}
+			FObjectProperty* ObjProp = CastField<FObjectProperty>(Prop);
+			if (ObjProp)
+			{
+				ObjProp->SetObjectPropertyValue(ValuePtr, Asset);
+			}
+		}
+		else
+		{
+			SendResponse(BuildActorErrorResponse(CorrId, TEXT("unsupported_value_type")) + TEXT("\n"));
+			return;
+		}
+
+		// Mark level dirty.
+		if (TargetActor->GetLevel())
+		{
+			TargetActor->GetLevel()->MarkPackageDirty();
+		}
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetStringField(TEXT("label"), ActorLabel);
+		Data->SetStringField(TEXT("property"), PropertyName);
+		Data->SetStringField(TEXT("value_type"), ValueType);
+		Data->SetBoolField(TEXT("applied"), true);
+
+		SendResponse(BuildActorSuccessResponse(CorrId, Data) + TEXT("\n"));
+	});
 }
