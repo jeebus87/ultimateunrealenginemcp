@@ -208,51 +208,24 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 		return FString();
 	}
 
-	// Enable realtime rendering so the viewport actually renders frames.
+	// Enable realtime rendering so the viewport continuously renders frames.
 	// Without this, the editor viewport only renders when "dirty" and
-	// ReadPixels captures a stale/blank framebuffer.
-	const bool bWasRealtime = ViewportClient->IsRealtime();
+	// FScreenshotRequest never gets picked up on subsequent calls.
 	ViewportClient->SetRealtime(true);
 
-	// Force a full viewport redraw. Invalidate marks it dirty,
-	// then Draw executes the render pipeline synchronously.
-	ViewportClient->Viewport->Invalidate();
-	ViewportClient->Viewport->Draw();
-	FlushRenderingCommands();
-
-	// Read pixels from the viewport framebuffer.
-	TArray<FColor> Pixels;
-	const bool bReadOk = ViewportClient->Viewport->ReadPixels(Pixels);
-
-	// Restore previous realtime state.
-	if (!bWasRealtime)
-	{
-		ViewportClient->SetRealtime(false);
-	}
-
-	if (!bReadOk)
-	{
-		return FString();
-	}
-
-	const int32 VPWidth  = ViewportClient->Viewport->GetSizeXY().X;
-	const int32 VPHeight = ViewportClient->Viewport->GetSizeXY().Y;
-
-	if (Pixels.Num() != VPWidth * VPHeight || VPWidth == 0 || VPHeight == 0)
-	{
-		return FString();
-	}
-
-	// Compress to PNG.
-	TArray64<uint8> PngData;
-	FImageUtils::PNGCompressImageArray(VPWidth, VPHeight, Pixels, PngData);
-
-	// Write to file.
 	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%s"));
 	const FString FileName  = FString::Printf(TEXT("mcp_screenshot_%s.png"), *Timestamp);
 	const FString FilePath  = FPaths::Combine(GetMCPScreenshotDir(), FileName);
 
-	FFileHelper::SaveArrayToFile(PngData, *FilePath);
+	GScreenshotResolutionX = Width;
+	GScreenshotResolutionY = Height;
+
+	// Invalidate to ensure the viewport redraws with current camera state.
+	ViewportClient->Viewport->Invalidate();
+
+	// Request screenshot to a specific file path. With realtime enabled,
+	// the renderer will process this on the next frame.
+	FScreenshotRequest::RequestScreenshot(FilePath, false /* bShowUI */, false /* bAddFilenameSuffix */);
 
 	return FilePath;
 }
@@ -361,7 +334,7 @@ void RegisterViewportCommands(FMCPCommandRouter& Router)
 		Data->SetStringField(TEXT("file_path"), FilePath);
 		Data->SetNumberField(TEXT("width"),  static_cast<double>(Width));
 		Data->SetNumberField(TEXT("height"), static_cast<double>(Height));
-		Data->SetBoolField(TEXT("saved"), true);
+		Data->SetBoolField(TEXT("async"), true);
 
 		SendResponse(BuildViewportSuccessResponse(CorrId, Data) + TEXT("\n"));
 	});
