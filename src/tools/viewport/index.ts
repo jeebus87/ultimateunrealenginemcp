@@ -496,7 +496,7 @@ export function registerViewportTools(server: McpServer, bridge?: PluginBridgeCl
     {
       title: 'Visual Review Screenshot',
       description:
-        '[requires_plugin] Take a quick viewport screenshot for visual review. Returns the image inline with camera context. Use this for iterative review loops.',
+        '[requires_plugin] Take a quick viewport screenshot for visual review. Returns the image inline with camera context. Use this to VERIFY changes after any mutation (spawn, transform, property set). Always screenshot after making visual changes — do not ask the user to check manually.',
       inputSchema: z.object({
         width: z
           .number()
@@ -746,7 +746,7 @@ export function registerViewportTools(server: McpServer, bridge?: PluginBridgeCl
     {
       title: 'Full Scene Context Snapshot',
       description:
-        '[requires_plugin] Get full visual and semantic context in one call. Takes a screenshot AND returns structured data about nearby actors. Use this to orient yourself — see what you are looking at and what is nearby.',
+        '[requires_plugin] Get full visual and semantic context in one call. Takes a screenshot AND returns structured data about nearby actors. Use this to orient yourself and to verify complex multi-actor changes — see what you are looking at, what is nearby, and whether everything is in the right place.',
       inputSchema: z.object({
         width: z
           .number()

@@ -85,6 +85,75 @@ import { registerNetworkingTools } from './tools/networking/index.js';
   registerMovieRenderTools(server); // Movie Render Pipeline tools (MRP-01..04)
   registerNetworkingTools(server); // Networking & Replication tools (NET-01..04)
 
+  // ---------------------------------------------------------------------------
+  // Register best-practices resource: self-verification guide
+  // ---------------------------------------------------------------------------
+  server.registerResource(
+    'ue_best_practices',
+    'ue://best-practices/self-verification',
+    {
+      title: 'UE MCP Best Practices: Self-Verification',
+      description: 'Guidelines for AI assistants using UE MCP tools. Covers mandatory self-verification after mutations, spatial reasoning patterns, and the inspect-reason-fix cycle.',
+      mimeType: 'text/markdown',
+    },
+    async (_uri) => ({
+      contents: [{
+        uri: 'ue://best-practices/self-verification',
+        mimeType: 'text/markdown',
+        text: `# UE MCP Best Practices: Self-Verification
+
+## Core Principle
+
+**Always verify your own work before reporting success to the user.**
+
+Every mutation (spawn, transform, property set, asset creation) must be followed by a verification step. Never ask the user to "check if that looks right" when you have tools to check it yourself.
+
+## Verification Matrix
+
+| After this action... | Verify with... |
+|---|---|
+| \`ue_spawn_actor\` | \`ue_get_component_bounds\` to confirm position, then \`ue_look_at\` to visually confirm |
+| \`ue_transform_actor\` | \`ue_get_component_bounds\` — rotations can shift meshes relative to pivots |
+| \`ue_set_actor_property\` (spatial) | \`ue_get_component_bounds\` for position/scale, \`ue_visual_review\` for visual properties |
+| \`ue_set_actor_property\` (material/mesh) | \`ue_look_at\` or \`ue_visual_review\` to confirm visual result |
+| \`ue_delete_actor\` | \`ue_list_actors\` to confirm removal |
+| \`ue_create_data_asset\` / \`ue_create_curve\` | \`ue_query_assets\` to confirm creation |
+| Any visual change | \`ue_visual_review\` or \`ue_look_at\` to see the result |
+
+## The Inspect-Reason-Fix Cycle
+
+When working with spatial placement (actors, components, doors, furniture):
+
+1. **Act** — spawn, transform, or set property
+2. **Measure** — \`ue_get_component_bounds\` to get exact numerical positions
+3. **Reason** — do the bounds match expectations? Are components where they should be?
+4. **Fix** — if not, adjust offsets/rotations to compensate
+5. **Verify** — re-measure to confirm the fix worked
+
+Repeat until all components are correctly positioned. Only THEN report success to the user.
+
+## Common Spatial Pitfalls
+
+- **Negative scale flips normals** — use 180-degree rotation instead of -1 scale to flip meshes
+- **Rotations shift mesh position** — rotating around a pivot moves the mesh; always check bounds after rotation
+- **Component offsets are relative** — a rotated parent changes where child offsets end up in world space
+- **Collision doesn't auto-follow mesh** — if you move/rotate a mesh component, the collision component may need separate adjustment
+
+## Visual Verification
+
+For any change that affects what the user will SEE in the viewport:
+1. Use \`ue_look_at\` to navigate the camera to the changed actor
+2. Inspect the screenshot — check for: missing meshes, wrong orientation, clipping, z-fighting, scale issues
+3. If something looks wrong, fix it BEFORE telling the user
+
+## Cleanup
+
+When a visual review session is complete, call \`ue_cleanup_screenshots(confirm=true)\` to free disk space.
+`,
+      }],
+    })
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

@@ -103,7 +103,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Spawn UE Actor',
       description:
-        '[requires_plugin] Spawn a new actor in the currently open UE Editor level at the specified location.',
+        '[requires_plugin] Spawn a new actor in the currently open UE Editor level at the specified location. After spawning, ALWAYS verify placement with ue_get_component_bounds or ue_look_at before reporting success to the user.',
       inputSchema: z.object({
         class_name: z.string().describe('The actor class to spawn (e.g., AStaticMeshActor)'),
         location: z.object({
@@ -136,7 +136,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Set Actor Property',
       description:
-        '[requires_plugin] Set a UPROPERTY value on an actor by label. Supports bool, int, float, string, name, text, actor (reference by label), and asset (reference by path).',
+        '[requires_plugin] Set a UPROPERTY value on an actor by label. Supports bool, int, float, string, name, text, actor (reference by label), and asset (reference by path). After setting spatial properties (transforms, offsets, scale), verify the result with ue_get_component_bounds before reporting success.',
       inputSchema: z.object({
         actor_label: z.string().describe('The editor label of the target actor'),
         property_name: z.string().describe('The UPROPERTY name to set (e.g., RoomID, RoomDoor, DoorCurve)'),
@@ -172,7 +172,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Create Data Asset',
       description:
-        '[requires_plugin] Create a UPrimaryDataAsset (or subclass) at the given path with reflection-set properties.',
+        '[requires_plugin] Create a UPrimaryDataAsset (or subclass) at the given path with reflection-set properties. After creation, verify the asset exists with ue_query_assets.',
       inputSchema: z.object({
         asset_path: z.string().describe('UE asset path, e.g. /Game/Data/DA_ValveHandle'),
         class_name: z.string().describe('Asset class name, e.g. ItemDefinition'),
@@ -201,7 +201,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Create Float Curve',
       description:
-        '[requires_plugin] Create a UCurveFloat asset with keyframes at the given path.',
+        '[requires_plugin] Create a UCurveFloat asset with keyframes at the given path. After creation, verify the asset exists with ue_query_assets.',
       inputSchema: z.object({
         asset_path: z.string().describe('UE asset path, e.g. /Game/Curves/C_DoorSwing'),
         keys: z.array(z.object({
@@ -231,7 +231,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Transform UE Actor',
       description:
-        '[requires_plugin] Move, rotate, and/or scale an existing actor in the currently open UE Editor level.',
+        '[requires_plugin] Move, rotate, and/or scale an existing actor in the currently open UE Editor level. IMPORTANT: After transforming, always verify the result with ue_get_component_bounds (numerical check) or ue_look_at/ue_visual_review (visual check) before telling the user it worked. Rotations can shift meshes relative to pivots — always confirm final bounds.',
       inputSchema: z.object({
         actor_label: z.string().describe('The editor label of the actor to transform'),
         location: z
@@ -281,7 +281,7 @@ export function registerEditorTools(server: McpServer, bridge?: PluginBridgeClie
     {
       title: 'Delete UE Actor',
       description:
-        '[requires_plugin] Delete an actor from the currently open UE Editor level. This operation is destructive.',
+        '[requires_plugin] Delete an actor from the currently open UE Editor level. This operation is destructive. After deleting, verify with ue_list_actors that the actor is gone.',
       inputSchema: z.object({
         actor_label: z.string().describe('The editor label of the actor to delete'),
       }),

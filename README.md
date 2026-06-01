@@ -23,6 +23,7 @@ npx ultimate-unreal-engine-mcp setup
 - [Architecture](#architecture)
 - [Tool Catalog](#tool-catalog)
 - [Visual Review Loop](#visual-review-loop)
+- [Automatic Self-Verification](#automatic-self-verification)
 - [Headless vs Live](#headless-vs-live)
 - [Installation](#installation)
 - [C++ Plugin Setup](#c-plugin-setup)
@@ -540,6 +541,51 @@ ue_orbit_review("TargetActor", angles=[0, 90, 180, 270])
 ue_cleanup_screenshots(confirm=true)
   → disk cleaned
 ```
+
+---
+
+## Automatic Self-Verification
+
+Every mutating tool description includes **mandatory verification guidance** — the AI is instructed to verify its own work before reporting success. This isn't a suggestion; it's baked into the tool interface.
+
+**Why this matters:** In spatial work (placing doors, aligning meshes, wiring components), a single transform can have cascading effects — rotating a mesh around a pivot shifts its world position, negative scale flips face normals making geometry invisible, collision volumes don't automatically follow mesh offsets. Without verification, the AI reports "done" while the door is floating 2 meters from the wall.
+
+**How it works:**
+
+```
+ue_spawn_actor("BP_Door", location={x:1040, y:150, z:0})
+  → Actor spawned
+
+ue_get_component_bounds("BP_Door", component="DoorMesh")     ← automatic
+  → bounds: X=[806, 994] ✓ — in the doorway
+
+ue_set_actor_property("BP_Door", "DoorMesh.RelativeRotation", ...)
+  → Property set
+
+ue_get_component_bounds("BP_Door", component="DoorMesh")     ← automatic
+  → bounds: X=[1040, 1228] ✗ — rotation shifted mesh out of gap
+
+ue_set_actor_property("BP_Door", "DoorMesh.RelativeLocation", ...)   ← self-correction
+  → Offset compensated
+
+ue_get_component_bounds("BP_Door", component="DoorMesh")     ← re-verify
+  → bounds: X=[806, 994] ✓ — back in place
+
+ue_look_at("BP_Door", angle="front")                          ← visual confirm
+  → [screenshot inline] door visible, handle correct side ✓
+```
+
+**The Inspect-Reason-Fix cycle:**
+
+| Step | What happens | Tool |
+|------|-------------|------|
+| **Act** | Spawn, transform, or set property | `ue_spawn_actor`, `ue_transform_actor`, `ue_set_actor_property` |
+| **Measure** | Get exact numerical positions | `ue_get_component_bounds` |
+| **Reason** | Do bounds match expectations? | (AI reasoning) |
+| **Fix** | Adjust offsets to compensate | Same mutation tools |
+| **Verify** | Confirm fix worked, visually and numerically | `ue_get_component_bounds` + `ue_look_at` |
+
+The AI also has access to a `ue://best-practices/self-verification` MCP resource that documents verification patterns, common spatial pitfalls, and the full verification matrix.
 
 ---
 
