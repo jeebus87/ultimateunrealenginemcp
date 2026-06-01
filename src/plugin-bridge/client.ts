@@ -220,28 +220,47 @@ export class PluginBridgeClient {
     return new Promise((resolve, reject) => {
       const socket = net.createConnection({ port: this.port, host: '127.0.0.1' });
 
-      // JSON-newline response parser — accumulates partial chunks, splits on \n,
-      // and resolves the correlated pending promise.
-      // Threat T-07-09 mitigation: try/catch around JSON.parse; unknown correlationId
-      // is silently dropped — no state corruption.
+      // JSON response parser — handles UE's pretty-printed multi-line JSON.
+      // UE's FJsonSerializer outputs JSON with \r\n and tabs inside the object,
+      // so we can't split on \n (that would break mid-object). Instead we track
+      // brace depth: when depth returns to 0, we have a complete JSON object.
       socket.on('data', (chunk: Buffer) => {
         this.receiveBuffer += chunk.toString('utf8');
-        let newlineIdx: number;
-        while ((newlineIdx = this.receiveBuffer.indexOf('\n')) !== -1) {
-          const line = this.receiveBuffer.slice(0, newlineIdx).trim();
-          this.receiveBuffer = this.receiveBuffer.slice(newlineIdx + 1);
-          if (line.length === 0) { continue; }
-          try {
-            const response = JSON.parse(line) as MCPResponse;
-            const pending = this.pendingCommands.get(response.correlationId);
-            if (pending) {
-              this.pendingCommands.delete(response.correlationId);
-              pending.resolve(response);
+        let startIdx = -1;
+        let depth = 0;
+        for (let i = 0; i < this.receiveBuffer.length; i++) {
+          const ch = this.receiveBuffer[i];
+          if (ch === '{') {
+            if (depth === 0) { startIdx = i; }
+            depth++;
+          } else if (ch === '}') {
+            depth--;
+            if (depth === 0 && startIdx >= 0) {
+              const jsonStr = this.receiveBuffer.slice(startIdx, i + 1);
+              // Remove everything up to and including this object
+              this.receiveBuffer = this.receiveBuffer.slice(i + 1);
+              try {
+                const response = JSON.parse(jsonStr) as MCPResponse;
+                const pending = this.pendingCommands.get(response.correlationId);
+                if (pending) {
+                  this.pendingCommands.delete(response.correlationId);
+                  pending.resolve(response);
+                }
+              } catch {
+                // Malformed JSON — ignore (T-07-09 mitigation)
+              }
+              // Reset loop to scan remaining buffer from the start
+              i = -1;
+              startIdx = -1;
             }
-            // Unknown correlationId — silently drop (T-07-09 mitigation)
-          } catch {
-            // Non-JSON line — ignore (T-07-09 mitigation)
           }
+        }
+        // Keep only unprocessed data (partial object) in the buffer
+        if (startIdx > 0) {
+          this.receiveBuffer = this.receiveBuffer.slice(startIdx);
+        } else if (depth === 0) {
+          // No open braces — discard any whitespace/newlines between objects
+          this.receiveBuffer = '';
         }
       });
 
