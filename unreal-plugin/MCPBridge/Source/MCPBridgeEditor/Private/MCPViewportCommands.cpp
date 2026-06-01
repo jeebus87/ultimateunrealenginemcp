@@ -24,6 +24,8 @@
 #include "Editor.h"
 #include "EditorViewportClient.h"
 #include "LevelEditorViewport.h"
+#include "LevelEditor.h"
+#include "SLevelViewport.h"
 #include "UnrealClient.h"
 #include "HighResScreenshot.h"
 #include "Misc/Paths.h"
@@ -74,10 +76,10 @@ static FString BuildViewportErrorResponse(const FString& CorrId, const FString& 
 }
 
 /**
- * Returns the first visible level editor viewport client, or nullptr if none is open.
- * A static_cast is safe here because MCPBridgeEditor only runs inside the editor and
- * GetAllViewportClients() in the level editor context returns FLevelEditorViewportClient
- * instances.
+ * Returns the first level editor viewport client.
+ * Uses FLevelEditorModule::GetFirstActiveLevelViewport() which reliably
+ * returns the docked viewport even when it doesn't have focus.
+ * Falls back to GEditor->GetAllViewportClients() scan if the module approach fails.
  */
 static FLevelEditorViewportClient* GetActiveViewportClient()
 {
@@ -86,14 +88,24 @@ static FLevelEditorViewportClient* GetActiveViewportClient()
 		return nullptr;
 	}
 
+	// Primary path: use the LevelEditor module API (works for docked viewports).
+	if (FModuleManager::Get().IsModuleLoaded(TEXT("LevelEditor")))
+	{
+		FLevelEditorModule& LevelEditorModule =
+			FModuleManager::GetModuleChecked<FLevelEditorModule>(TEXT("LevelEditor"));
+		TSharedPtr<SLevelViewport> ActiveViewport = LevelEditorModule.GetFirstActiveLevelViewport();
+		if (ActiveViewport.IsValid())
+		{
+			return &ActiveViewport->GetLevelViewportClient();
+		}
+	}
+
+	// Fallback: iterate all viewport clients.
 	for (FEditorViewportClient* VC : GEditor->GetAllViewportClients())
 	{
-		if (!VC)
-		{
-			continue;
-		}
+		if (!VC) continue;
 		FLevelEditorViewportClient* LVC = static_cast<FLevelEditorViewportClient*>(VC);
-		if (LVC && LVC->IsVisible())
+		if (LVC)
 		{
 			return LVC;
 		}
