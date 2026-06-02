@@ -10,6 +10,9 @@
 
 #include "Editor.h"
 #include "Selection.h"
+#include "FileHelpers.h"
+#include "HAL/PlatformMisc.h"
+#include "Containers/Ticker.h"
 #include "EditorViewportClient.h"
 #include "LevelEditorViewport.h"
 #include "EngineUtils.h"
@@ -169,5 +172,47 @@ void RegisterEditorStateCommands(FMCPCommandRouter& Router)
 		Data->SetObjectField(TEXT("viewport"),      ViewportObj);
 
 		SendResponse(BuildEditorStateSuccessResponse(CorrId, Data) + TEXT("\n"));
+	});
+
+	// -----------------------------------------------------------------------
+	// editor.saveAll
+	// Saves all dirty packages (levels, assets). Returns count of saved packages.
+	// -----------------------------------------------------------------------
+	Router.RegisterHandler(TEXT("editor.saveAll"), [](TSharedPtr<FJsonObject> Cmd, FMCPResponseSender SendResponse)
+	{
+		const FString CorrId = Cmd->GetStringField(TEXT("correlationId"));
+
+		const bool bSaved = FEditorFileUtils::SaveDirtyPackages(
+			false,  // bPromptUserToSave
+			true,   // bSaveMapPackages
+			true,   // bSaveContentPackages
+			false); // bFastSave
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetBoolField(TEXT("saved"), bSaved);
+
+		SendResponse(BuildEditorStateSuccessResponse(CorrId, Data) + TEXT("\n"));
+	});
+
+	// -----------------------------------------------------------------------
+	// editor.quit
+	// Gracefully closes the editor. Response is sent before shutdown begins.
+	// -----------------------------------------------------------------------
+	Router.RegisterHandler(TEXT("editor.quit"), [](TSharedPtr<FJsonObject> Cmd, FMCPResponseSender SendResponse)
+	{
+		const FString CorrId = Cmd->GetStringField(TEXT("correlationId"));
+
+		TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+		Data->SetBoolField(TEXT("quitting"), true);
+
+		SendResponse(BuildEditorStateSuccessResponse(CorrId, Data) + TEXT("\n"));
+
+		// Defer the actual quit to next tick so the response gets sent first.
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([](float) -> bool
+		{
+			FPlatformMisc::RequestExit(false); // false = clean shutdown
+			return false;
+		}), 0.1f);
 	});
 }

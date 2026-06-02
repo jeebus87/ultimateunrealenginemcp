@@ -187,6 +187,120 @@ static UObject* CreateFbxFactory(bool bImportMaterials, bool bCombineMeshes, flo
 void RegisterImportExportCommands(FMCPCommandRouter& Router)
 {
 	// -----------------------------------------------------------------------
+	// import.texture
+	// Imports a texture file (PNG, JPG, TGA, etc.) to a UE content path.
+	// Uses UTextureFactory via reflection. Runs synchronously (no Interchange).
+	// Payload: { source_file, dest_path }
+	// -----------------------------------------------------------------------
+	Router.RegisterHandler(TEXT("import.texture"), [](TSharedPtr<FJsonObject> Cmd, FMCPResponseSender SendResponse)
+	{
+		const FString CorrId = Cmd->GetStringField(TEXT("correlationId"));
+
+		TSharedPtr<FJsonObject> Payload;
+		const TSharedPtr<FJsonValue>* PayloadVal = Cmd->Values.Find(TEXT("payload"));
+		if (PayloadVal && (*PayloadVal)->Type == EJson::Object)
+		{
+			Payload = (*PayloadVal)->AsObject();
+		}
+
+		FString SourceFile, DestPath;
+		if (!Payload.IsValid()
+			|| !Payload->TryGetStringField(TEXT("source_file"), SourceFile) || SourceFile.IsEmpty()
+			|| !Payload->TryGetStringField(TEXT("dest_path"), DestPath) || DestPath.IsEmpty())
+		{
+			SendResponse(BuildImpErrorResponse(CorrId, TEXT("missing_required_fields")) + TEXT("\n"));
+			return;
+		}
+
+		if (SourceFile.Contains(TEXT("..")) || !FPaths::FileExists(SourceFile))
+		{
+			SendResponse(BuildImpErrorResponse(CorrId, TEXT("source_file_not_found")) + TEXT("\n"));
+			return;
+		}
+
+		if (!IsValidAssetPath(DestPath))
+		{
+			SendResponse(BuildImpErrorResponse(CorrId, TEXT("invalid_dest_path")) + TEXT("\n"));
+			return;
+		}
+
+		// Split dest into path + name.
+		FString PackagePath = DestPath;
+		FString AssetName;
+		if (DestPath.EndsWith(TEXT("/")))
+		{
+			AssetName = FPaths::GetBaseFilename(SourceFile);
+			PackagePath = DestPath.LeftChop(1);
+		}
+		else
+		{
+			AssetName = FPackageName::GetLongPackageAssetName(DestPath);
+			PackagePath = FPackageName::GetLongPackagePath(DestPath);
+			if (AssetName.IsEmpty())
+			{
+				AssetName = FPaths::GetBaseFilename(SourceFile);
+				PackagePath = DestPath;
+			}
+		}
+
+		// Find UTextureFactory via reflection (avoids including engine-specific headers).
+		UClass* TextureFactoryClass = FindObject<UClass>(nullptr, TEXT("/Script/UnrealEd.TextureFactory"));
+		if (!TextureFactoryClass)
+		{
+			SendResponse(BuildImpErrorResponse(CorrId, TEXT("texture_factory_not_found")) + TEXT("\n"));
+			return;
+		}
+
+		UObject* TextureFactory = NewObject<UObject>(GetTransientPackage(), TextureFactoryClass);
+		if (!TextureFactory)
+		{
+			SendResponse(BuildImpErrorResponse(CorrId, TEXT("factory_creation_failed")) + TEXT("\n"));
+			return;
+		}
+
+		// Create import task.
+		IAssetTools& AT = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+
+		UAssetImportTask* Task = NewObject<UAssetImportTask>();
+		Task->Filename = SourceFile;
+		Task->DestinationPath = PackagePath;
+		Task->DestinationName = AssetName;
+		Task->bAutomated = true;
+		Task->bReplaceExisting = true;
+		Task->bSave = true;
+
+		// Set the factory.
+		FObjectProperty* FactoryProp = CastField<FObjectProperty>(
+			Task->GetClass()->FindPropertyByName(TEXT("Factory")));
+		if (FactoryProp)
+		{
+			FactoryProp->SetObjectPropertyValue_InContainer(Task, TextureFactory);
+		}
+
+		// Run import via ticker (same pattern as FBX — avoids task graph recursion).
+		FTSTicker::GetCoreTicker().AddTicker(
+			FTickerDelegate::CreateLambda([CorrId, SendResponse, Task, &AT](float) -> bool
+		{
+			TArray<UAssetImportTask*> Tasks;
+			Tasks.Add(Task);
+			AT.ImportAssetTasks(Tasks);
+
+			TArray<TSharedPtr<FJsonValue>> AssetsArray;
+			for (const FString& ImportedPath : Task->ImportedObjectPaths)
+			{
+				AssetsArray.Add(MakeShared<FJsonValueString>(ImportedPath));
+			}
+
+			TSharedPtr<FJsonObject> Data = MakeShared<FJsonObject>();
+			Data->SetArrayField(TEXT("assets"), AssetsArray);
+			Data->SetNumberField(TEXT("count"), static_cast<double>(AssetsArray.Num()));
+
+			SendResponse(BuildImpSuccessResponse(CorrId, Data) + TEXT("\n"));
+			return false;
+		}), 0.0f);
+	});
+
+	// -----------------------------------------------------------------------
 	// import.fbx (IMP-01)
 	// Imports an FBX file to a UE content path.
 	// Returns JSON with "assets" array of created asset paths and "count".

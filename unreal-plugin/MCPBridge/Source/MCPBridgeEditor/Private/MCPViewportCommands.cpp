@@ -208,9 +208,7 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 		return FString();
 	}
 
-	// Enable realtime rendering so the viewport continuously renders frames.
-	// Without this, the editor viewport only renders when "dirty" and
-	// FScreenshotRequest never gets picked up on subsequent calls.
+	// Enable realtime rendering so the viewport renders frames continuously.
 	ViewportClient->SetRealtime(true);
 
 	const FString Timestamp = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S_%s"));
@@ -220,12 +218,21 @@ static FString TakeScreenshotToFile(int32 Width, int32 Height)
 	GScreenshotResolutionX = Width;
 	GScreenshotResolutionY = Height;
 
-	// Invalidate to ensure the viewport redraws with current camera state.
+	// Force a complete render cycle BEFORE requesting the screenshot.
+	// This ensures the viewport has rendered the current camera state.
+	// Without this, subsequent screenshots within the same session fail
+	// because FScreenshotRequest only fires once per rendered frame.
 	ViewportClient->Viewport->Invalidate();
+	GEditor->RedrawAllViewports();
+	FlushRenderingCommands();
 
-	// Request screenshot to a specific file path. With realtime enabled,
-	// the renderer will process this on the next frame.
+	// Now request the screenshot — the next frame render will capture it.
 	FScreenshotRequest::RequestScreenshot(FilePath, false /* bShowUI */, false /* bAddFilenameSuffix */);
+
+	// Force another render to actually capture the screenshot.
+	ViewportClient->Viewport->Invalidate();
+	GEditor->RedrawAllViewports();
+	FlushRenderingCommands();
 
 	return FilePath;
 }
